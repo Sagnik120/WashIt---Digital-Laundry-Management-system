@@ -1,1 +1,1 @@
-# WashIt---Digital-Laundry-Management-system" >> README.md
+# WashIt---Digital-Laundry-Management-system
