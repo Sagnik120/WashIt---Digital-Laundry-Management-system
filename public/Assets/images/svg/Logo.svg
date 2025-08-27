@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="650" viewBox="0 0 256 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .primary { fill: #0A4D8C; }
+      .accent { fill: #4DB7FF; }
+      .stroke { stroke: #0A4D8C; stroke-width: 8; }
+      .rounded { stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <!-- Washing machine icon only -->
+  <!-- Body -->
+  <rect x="16" y="16" rx="24" ry="24" width="224" height="280" class="stroke rounded" fill="white"/>
+  <!-- Top panel details -->
+  <rect x="40" y="36" width="100" height="16" class="primary" rx="8"/>
+  <circle cx="170" cy="50" r="8" class="primary"/>
+  <circle cx="194" cy="50" r="8" class="primary"/>
+
+  <!-- Drum bezel -->
+  <circle cx="128" cy="150" r="72" class="stroke" fill="none"/>
+  <!-- Drum window -->
+  <circle cx="128" cy="150" r="56" class="accent"/>
+  <!-- Water wave inside drum -->
+  <path d="M72 148 C92 136, 112 160, 128 148 C148 136, 164 160, 184 148 L184 168 A56 56 0 0 1 72 168 Z" class="primary" opacity="0.25"/>
+  <!-- Bubbles -->
+  <circle cx="112" cy="128" r="7" fill="white" opacity="0.85"/>
+  <circle cx="144" cy="120" r="5" fill="white" opacity="0.85"/>
+</svg>
