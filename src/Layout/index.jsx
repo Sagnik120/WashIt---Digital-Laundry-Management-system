@@ -2,7 +2,7 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
 
-const PrivateLayout = dynamic(() => import("./PrivateLayout"), {
+const PrivateLayout = dynamic(() => import("./PrivateLayout.tsx"), {
   ssr: false,
 });
 
@@ -12,7 +12,7 @@ const ProtectedRoute = dynamic(() => import("@/routes/ProtectedRoute"), {
 
 const Layout = ({ children }) => {
   const pathname = usePathname();
-  const privateRoutes = [];
+  const privateRoutes = ["/userDashboard"];
   const publicRoutes = [
     "/auth/login",
     "/home",
@@ -25,9 +25,10 @@ const Layout = ({ children }) => {
 
   if (privateRoutes.includes(pathname)) {
     return (
-      <ProtectedRoute>
-        <PrivateLayout>{children}</PrivateLayout>
-      </ProtectedRoute>
+      <PrivateLayout>{children}</PrivateLayout>
+      // <ProtectedRoute>
+      //   <PrivateLayout>{children}</PrivateLayout>
+      // </ProtectedRoute>
     );
   } else if (publicRoutes.includes(pathname)) {
     return children;

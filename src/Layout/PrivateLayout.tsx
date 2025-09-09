@@ -38,9 +38,15 @@ import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import PagesIcon from "@mui/icons-material/Pages";
 import SubscriptionsIcon from "@mui/icons-material/Subscriptions";
 import PriceChangeIcon from "@mui/icons-material/PriceChange";
+
 const drawerWidth = 300;
 
-const openedMixin = (theme) => ({
+interface AppBarProps {
+  open?: boolean;
+}
+
+// ========== Drawer Styling ==========
+const openedMixin = (theme: any) => ({
   width: drawerWidth,
   transition: theme.transitions.create("width", {
     easing: theme.transitions.easing.sharp,
@@ -49,7 +55,7 @@ const openedMixin = (theme) => ({
   overflowX: "hidden",
 });
 
-const closedMixin = (theme) => ({
+const closedMixin = (theme: any) => ({
   transition: theme.transitions.create("width", {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
@@ -80,7 +86,7 @@ const DrawerHeader = styled("div")(({ theme }) => ({
 
 const AppBar = styled(MuiAppBar, {
   shouldForwardProp: (prop) => prop !== "open",
-})(({ theme, open }) => ({
+})<AppBarProps>(({ theme, open }) => ({
   zIndex: theme.zIndex.drawer + 1,
   width: "100%",
   transition: theme.transitions.create(["width", "margin"], {
@@ -101,7 +107,7 @@ const AppBar = styled(MuiAppBar, {
 
 const Drawer = styled(MuiDrawer, {
   shouldForwardProp: (prop) => prop !== "open",
-})(({ theme, open }) => ({
+})(({ theme, open }: any) => ({
   width: drawerWidth,
   flexShrink: 0,
   whiteSpace: "nowrap",
@@ -122,13 +128,22 @@ const Drawer = styled(MuiDrawer, {
   }),
 }));
 
-export default function PrivateLayout({ children }) {
+// ========== Component ==========
+export default function PrivateLayout({ children }: any) {
   const theme = useTheme();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<any>(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [role, setRole] = useState<any>('staff');
+
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const router = useRouter();
   const pathname = usePathname();
+
+  // Get role from localStorage
+  // useEffect(() => {
+  //   const storedRole = localStorage.getItem("role");
+  //   setRole(storedRole);
+  // }, []);
 
   const menuData = [
     { name: "Users", icon: <PeopleIcon />, link: "/users", isShow: true },
@@ -190,38 +205,48 @@ export default function PrivateLayout({ children }) {
     },
   ];
 
-  const handleDrawerOpen = () => {
-    setOpen(true);
+  // Drawer Colors by role
+  const getRoleGradient = () => {
+    switch (role) {
+      case "student":
+        return "linear-gradient(180deg, #1e3a8a, #2563eb)"; // Blue
+      case "staff":
+        return "linear-gradient(180deg, #9333ea, #ec4899)"; // Purple-Pink
+      case "admin":
+        return "linear-gradient(180deg, #dc2626, #f97316)"; // Red-Orange
+      default:
+        return theme.palette.primary.main;
+    }
   };
 
-  const handleDrawerClose = () => {
-    setOpen(false);
+  const getHeaderGradient = () => {
+    switch (role) {
+      case "student":
+        return "linear-gradient(90deg, #1e3a8a, #2563eb)";
+      case "staff":
+        return "linear-gradient(90deg, #9333ea, #ec4899)";
+      case "admin":
+        return "linear-gradient(90deg, #dc2626, #f97316)";
+      default:
+        return "#ffffff";
+    }
   };
 
-  const handleMenuItemClick = (link) => {
-    if (pathname !== link) {
-      router.push(link);
-    }
-    if (isMobile) {
-      setOpen(false);
-    }
+  const handleDrawerOpen = () => setOpen(true);
+  const handleDrawerClose = () => setOpen(false);
+
+  const handleMenuItemClick = (link: string) => {
+    if (pathname !== link) router.push(link);
+    if (isMobile) setOpen(false);
   };
 
   const handleLogout = () => {
-    // Assuming cookieUtils is imported or defined elsewhere
-    // cookieUtils.removeCookie(LOGIN_TOKEN);
-    // cookieUtils.removeCookie('userData');
     localStorage.clear();
     setDialogOpen(false);
     router.push("/login");
   };
 
-  useEffect(() => {
-    if (isMobile) {
-      setOpen(false);
-    }
-  }, [isMobile]);
-
+  // Drawer content
   const drawer = (
     <>
       <DrawerHeader>
@@ -244,9 +269,7 @@ export default function PrivateLayout({ children }) {
           )}
         </IconButton>
       </DrawerHeader>
-
       <Divider sx={{ borderColor: "rgba(255, 255, 255, 0.12)" }} />
-
       <List>
         {menuData
           .filter((item) => item.isShow)
@@ -269,14 +292,6 @@ export default function PrivateLayout({ children }) {
                         backgroundColor: isActive
                           ? "#ffffff"
                           : "rgba(255, 255, 255, 0.08)",
-                      },
-                      "&::after": {
-                        content: "none",
-                      },
-                      borderRight: "none",
-                      "&.Mui-selected, &.Mui-selected:hover": {
-                        borderRight: "none",
-                        backgroundColor: "#ffffff",
                       },
                     }}
                   >
@@ -315,28 +330,14 @@ export default function PrivateLayout({ children }) {
   );
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        minHeight: "100vh",
-        position: "relative",
-        overflow: "hidden",
-        width: "100%",
-        maxWidth: "100vw", // Prevent horizontal overflow
-      }}
-    >
+    <Box sx={{ display: "flex", minHeight: "100vh", width: "100%" }}>
       <CssBaseline />
-
+      {/* Header */}
       <AppBar
         position="fixed"
-        open={open && !isMobile}
+        open={open}
         elevation={0}
-        sx={{
-          backgroundColor: theme.palette.bgWhite?.main || "#ffffff",
-          borderBottom: `1px solid ${
-            theme?.palette?.bgLightExtraGray?.main || "#e0e0e0"
-          }`,
-        }}
+        sx={{ background: "linear-gradient(135deg, #06b6d4, #3b82f6)", color: "#fff" }}
       >
         <Toolbar sx={{ minHeight: "64px !important", px: 2 }}>
           <Box
@@ -353,10 +354,7 @@ export default function PrivateLayout({ children }) {
                 aria-label="open drawer"
                 onClick={handleDrawerOpen}
                 edge="start"
-                sx={{
-                  ...(open && !isMobile && { display: "none" }),
-                  color: theme.palette.bgBlack?.main || "#000000",
-                }}
+                sx={{ ...(open && !isMobile && { display: "none" }) }}
               >
                 <MenuIcon />
               </IconButton>
@@ -367,16 +365,9 @@ export default function PrivateLayout({ children }) {
                 height={40}
               />
             </Box>
-
             <IconButton
               onClick={() => setDialogOpen(true)}
-              sx={{
-                color: theme.palette.bgGray?.main || "#666666",
-                "&:hover": {
-                  backgroundColor:
-                    theme?.palette?.bgLightBlue2?.main || "rgba(0, 0, 0, 0.04)",
-                },
-              }}
+              sx={{ color: "#fff" }}
             >
               <LogoutIcon />
             </IconButton>
@@ -389,16 +380,16 @@ export default function PrivateLayout({ children }) {
         variant="temporary"
         open={open}
         onClose={handleDrawerClose}
-        ModalProps={{
-          keepMounted: true,
-        }}
+        ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: "block", md: "none" },
           "& .MuiDrawer-paper": {
-            boxSizing: "border-box",
             width: drawerWidth,
-            background: theme.palette.primary.main,
-            zIndex: theme.zIndex.drawer + 2,
+            background: role === "student"
+              ? "linear-gradient(135deg, #1e3a8a, #2563eb)"
+              : role === "staff"
+                ? "linear-gradient(135deg, #9333ea, #ec4899)"
+                : "linear-gradient(135deg, #dc2626, #f97316)",
             borderRight: "none",
           },
         }}
@@ -413,8 +404,7 @@ export default function PrivateLayout({ children }) {
         sx={{
           display: { xs: "none", md: "block" },
           "& .MuiDrawer-paper": {
-            background: theme.palette.primary.main,
-            zIndex: theme.zIndex.drawer,
+            background: getRoleGradient(),
             width: open ? drawerWidth : `calc(${theme.spacing(8)} + 1px)`,
           },
         }}
@@ -430,20 +420,15 @@ export default function PrivateLayout({ children }) {
           px: { xs: 1, sm: 2, md: 3 },
           pt: { xs: 10, sm: 10, md: 11 },
           pb: { xs: 2, sm: 2, md: 3 },
-          backgroundColor: theme.palette.bgWhite?.main || "#ffffff",
-          position: "relative",
-          zIndex: 1,
-          width: "100%",
-          minWidth: 0,
+          backgroundColor: "#f9fafb",
           minHeight: "100vh",
-          boxSizing: "border-box",
         }}
       >
         {children}
       </Box>
 
-      {/* Logout Confirmation Modal */}
-      <CommonModal
+      {/* Logout Modal */}
+      {/* <CommonModal
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         maxWidth="sm"
@@ -452,24 +437,12 @@ export default function PrivateLayout({ children }) {
         <Box>
           <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
             <WarningOutlinedIcon
-              sx={{
-                color: theme?.palette?.bgLightWarning?.main || "#ff9800",
-                height: 60,
-                width: 60,
-              }}
+              sx={{ color: "#ff9800", height: 60, width: 60 }}
             />
           </Box>
-
-          <Typography
-            sx={{
-              fontSize: { xs: "16px", md: "18px", lg: "20px" },
-              textAlign: "center",
-              mb: 2,
-            }}
-          >
+          <Typography sx={{ fontSize: "18px", textAlign: "center", mb: 2 }}>
             Are you sure you want to logout?
           </Typography>
-
           <Box sx={{ display: "flex", justifyContent: "center", gap: 2 }}>
             <ButtonOutlined
               text="No"
@@ -483,7 +456,7 @@ export default function PrivateLayout({ children }) {
             />
           </Box>
         </Box>
-      </CommonModal>
+      </CommonModal> */}
     </Box>
   );
 }
