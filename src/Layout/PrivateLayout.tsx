@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import { styled, useTheme } from "@mui/material/styles";
@@ -13,31 +13,21 @@ import {
   ListItemIcon,
   ListItemText,
   Tooltip,
-  Typography,
   useMediaQuery,
   IconButton,
   Toolbar,
+  Avatar,
+  Typography,
 } from "@mui/material";
-import WarningOutlinedIcon from "@mui/icons-material/WarningOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import MuiAppBar from "@mui/material/AppBar";
-import ButtonOutlined from "@/Components/Common/ButtonOutlined";
-import ButtonContained from "@/Components/Common/ButtonContained";
-import BusinessIcon from "@mui/icons-material/Business";
-import WebAssetIcon from "@mui/icons-material/WebAsset";
 import LogoutIcon from "@mui/icons-material/Logout";
-import CommonModal from "@/Components/Common/CommonModal";
-import EventIcon from "@mui/icons-material/Event";
-import PeopleIcon from "@mui/icons-material/People";
-import LoyaltyIcon from "@mui/icons-material/Loyalty";
-import MonetizationOnIcon from "@mui/icons-material/MonetizationOn";
-import SellIcon from "@mui/icons-material/Sell";
-import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
-import PagesIcon from "@mui/icons-material/Pages";
-import SubscriptionsIcon from "@mui/icons-material/Subscriptions";
-import PriceChangeIcon from "@mui/icons-material/PriceChange";
+import PersonIcon from "@mui/icons-material/Person";
+import HistoryIcon from "@mui/icons-material/History";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import GavelIcon from "@mui/icons-material/Gavel";
 
 const drawerWidth = 300;
 
@@ -45,7 +35,7 @@ interface AppBarProps {
   open?: boolean;
 }
 
-// ========== Drawer Styling ==========
+// Drawer Styling
 const openedMixin = (theme: any) => ({
   width: drawerWidth,
   transition: theme.transitions.create("width", {
@@ -128,109 +118,25 @@ const Drawer = styled(MuiDrawer, {
   }),
 }));
 
-// ========== Component ==========
 export default function PrivateLayout({ children }: any) {
   const theme = useTheme();
   const [open, setOpen] = useState<any>(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [role, setRole] = useState<any>('staff');
 
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const router = useRouter();
   const pathname = usePathname();
 
-  // Get role from localStorage
-  // useEffect(() => {
-  //   const storedRole = localStorage.getItem("role");
-  //   setRole(storedRole);
-  // }, []);
-
   const menuData = [
-    { name: "Users", icon: <PeopleIcon />, link: "/users", isShow: true },
-    { name: "Events", icon: <EventIcon />, link: "/events", isShow: true },
-    {
-      name: "Companies",
-      icon: <BusinessIcon />,
-      link: "/companies",
-      isShow: true,
-    },
-    {
-      name: "Categories",
-      icon: <WebAssetIcon />,
-      link: "/categories",
-      isShow: true,
-    },
-    {
-      name: "Benefits & Sponsor Level",
-      icon: <LoyaltyIcon />,
-      link: "/benefits-sponsor-level",
-      isShow: true,
-    },
-    {
-      name: "Sponsors",
-      icon: <MonetizationOnIcon />,
-      link: "/sponsors",
-      isShow: true,
-    },
-    { name: "Tags", icon: <SellIcon />, link: "/tags", isShow: true },
-    {
-      name: "Coupon",
-      icon: <ConfirmationNumberIcon />,
-      link: "/coupon",
-      isShow: true,
-    },
-    {
-      name: "Landing Page",
-      icon: <PagesIcon />,
-      link: "/landing-page",
-      isShow: true,
-    },
-    {
-      name: "Subscriptions",
-      icon: <SubscriptionsIcon />,
-      link: "/subscriptions",
-      isShow: true,
-    },
-    {
-      name: "Pricing",
-      icon: <PriceChangeIcon />,
-      link: "/pricing",
-      isShow: true,
-    },
-    {
-      name: "Partners",
-      icon: <PriceChangeIcon />,
-      link: "/partners",
-      isShow: true,
-    },
+    { name: "Profile", icon: <PersonIcon />, link: "/userProfile", isShow: true },
+    { name: "History", icon: <HistoryIcon />, link: "/events", isShow: true },
+    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/companies", isShow: true },
+    { name: "Compliant", icon: <GavelIcon />, link: "/categories", isShow: true },
   ];
 
-  // Drawer Colors by role
-  const getRoleGradient = () => {
-    switch (role) {
-      case "student":
-        return "linear-gradient(180deg, #1e3a8a, #2563eb)"; // Blue
-      case "staff":
-        return "linear-gradient(180deg, #9333ea, #ec4899)"; // Purple-Pink
-      case "admin":
-        return "linear-gradient(180deg, #dc2626, #f97316)"; // Red-Orange
-      default:
-        return theme.palette.primary.main;
-    }
-  };
-
-  const getHeaderGradient = () => {
-    switch (role) {
-      case "student":
-        return "linear-gradient(90deg, #1e3a8a, #2563eb)";
-      case "staff":
-        return "linear-gradient(90deg, #9333ea, #ec4899)";
-      case "admin":
-        return "linear-gradient(90deg, #dc2626, #f97316)";
-      default:
-        return "#ffffff";
-    }
-  };
+  // Light sidebar colors
+  const drawerColor = "#f3f4f6"; // Light gray background
+  const textColor = "#1f2937"; // Dark text/icons
+  const activeItemColor = "#3b82f6"; // Blue for active item
 
   const handleDrawerOpen = () => setOpen(true);
   const handleDrawerClose = () => setOpen(false);
@@ -240,91 +146,93 @@ export default function PrivateLayout({ children }: any) {
     if (isMobile) setOpen(false);
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
-    setDialogOpen(false);
-    router.push("/login");
-  };
-
   // Drawer content
   const drawer = (
     <>
       <DrawerHeader>
-        {open && (
-          <Box sx={{ flex: 1, display: "flex", justifyContent: "center" }}>
-            <Image
-              src="/Assets/images/svg/Logo.svg"
-              alt="Logo"
-              width={100}
-              height={35}
-              style={{ filter: "brightness(0) invert(1)" }}
+        {open ? (
+          // ✅ Show user info when drawer is expanded
+          <Box
+            sx={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              px: 2,
+            }}
+          >
+            <Avatar
+              alt="User Name"
+              src="/Assets/images/user.jpg" // replace with dynamic user profile pic
+              sx={{ width: 40, height: 40 }}
             />
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, color: textColor }}>
+                John Doe
+              </Typography>
+              <Typography variant="body2" sx={{ color: "#6b7280", fontSize: 13 }}>
+                Admin
+              </Typography>
+            </Box>
           </Box>
+        ) : (
+          null
         )}
-        <IconButton onClick={handleDrawerClose} sx={{ color: "#ffffff" }}>
-          {theme.direction === "rtl" ? (
-            <ChevronRightIcon />
-          ) : (
-            <ChevronLeftIcon />
-          )}
+        <IconButton onClick={handleDrawerClose} sx={{ color: textColor }}>
+          {theme.direction === "rtl" ? <ChevronRightIcon /> : <ChevronLeftIcon />}
         </IconButton>
       </DrawerHeader>
-      <Divider sx={{ borderColor: "rgba(255, 255, 255, 0.12)" }} />
+
+      <Divider sx={{ borderColor: "rgba(31, 41, 55, 0.2)" }} />
       <List>
-        {menuData
-          .filter((item) => item.isShow)
-          .map((item, index) => {
-            const isActive = pathname.startsWith(item.link);
-            return (
-              <ListItem
-                key={index}
-                disablePadding
-                sx={{ display: "block", my: 1, width: "100%", padding: 0 }}
-                onClick={() => handleMenuItemClick(item.link)}
-              >
-                <Tooltip title={!open ? item.name : ""} placement="right">
-                  <ListItemButton
+        {menuData?.filter((item: any) => item.isShow)?.map((item: any, index: any) => {
+          const isActive = pathname.startsWith(item.link);
+          return (
+            <ListItem
+              key={index}
+              disablePadding
+              sx={{ display: "block", my: 1, width: "100%", padding: 0 }}
+              onClick={() => handleMenuItemClick(item.link)}
+            >
+              <Tooltip title={!open ? item.name : ""} placement="right">
+                <ListItemButton
+                  sx={{
+                    minHeight: 48,
+                    justifyContent: open ? "initial" : "center",
+                    background: isActive
+                      ? "linear-gradient(135deg, #06b6d4, #3b82f6)"
+                      : "transparent",
+                    "&:hover": {
+                      background: isActive
+                        ? "linear-gradient(135deg, #06b6d4, #3b82f6)" // ✅ keep same for active
+                        : "rgba(6, 182, 212, 0.1)", // ✅ only hover for non-active
+                    },
+                  }}
+                >
+                  <ListItemIcon
                     sx={{
-                      minHeight: 48,
-                      justifyContent: open ? "initial" : "center",
-                      backgroundColor: isActive ? "#ffffff" : "transparent",
-                      "&:hover": {
-                        backgroundColor: isActive
-                          ? "#ffffff"
-                          : "rgba(255, 255, 255, 0.08)",
-                      },
+                      minWidth: 0,
+                      mr: open ? 3 : "auto",
+                      justifyContent: "center",
+                      color: isActive ? "#fff" : textColor,
                     }}
                   >
-                    <ListItemIcon
-                      sx={{
-                        minWidth: 0,
-                        mr: open ? 3 : "auto",
-                        justifyContent: "center",
-                        color: isActive
-                          ? theme.palette.primary.main
-                          : "#ffffff",
-                      }}
-                    >
-                      {item.icon}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={item.name}
-                      sx={{
-                        opacity: open ? 1 : 0,
-                        color: isActive
-                          ? theme.palette.primary.main
-                          : "#ffffff",
-                        "& .MuiTypography-root": {
-                          fontSize: "16px",
-                          fontWeight: 500,
-                        },
-                      }}
-                    />
-                  </ListItemButton>
-                </Tooltip>
-              </ListItem>
-            );
-          })}
+                    {item.icon}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={item.name}
+                    sx={{
+                      opacity: open ? 1 : 0,
+                      color: isActive ? "#fff" : textColor,
+                      "& .MuiTypography-root": { fontSize: "16px", fontWeight: 500 },
+                    }}
+                  />
+                </ListItemButton>
+
+              </Tooltip>
+            </ListItem>
+          );
+        })}
       </List>
     </>
   );
@@ -332,6 +240,7 @@ export default function PrivateLayout({ children }: any) {
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", width: "100%" }}>
       <CssBaseline />
+
       {/* Header */}
       <AppBar
         position="fixed"
@@ -340,15 +249,8 @@ export default function PrivateLayout({ children }: any) {
         sx={{ background: "linear-gradient(135deg, #06b6d4, #3b82f6)", color: "#fff" }}
       >
         <Toolbar sx={{ minHeight: "64px !important", px: 2 }}>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              width: "100%",
-            }}
-          >
-            <Box display="flex" alignItems="center" gap={2}>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+            <Box display="flex" alignItems="center" gap={3}>
               <IconButton
                 color="inherit"
                 aria-label="open drawer"
@@ -358,17 +260,15 @@ export default function PrivateLayout({ children }: any) {
               >
                 <MenuIcon />
               </IconButton>
-              <Image
-                src="/Assets/images/svg/Logo.svg"
-                alt="Logo"
-                width={120}
-                height={40}
-              />
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Image src="/Assets/images/svg/Logo.svg" alt="Logo" width={38} height={38} />
+                <Typography fontSize="22px" sx={{ color: "white", fontWeight: 700, textShadow: "1px 1px 4px rgba(0,0,0,0.3)" }}>
+                  WashIt
+                </Typography>
+              </Box>
+              {/* <Image src="/Assets/images/svg/Logo.svg" alt="Logo" width={100} height={40} /> */}
             </Box>
-            <IconButton
-              onClick={() => setDialogOpen(true)}
-              sx={{ color: "#fff" }}
-            >
+            <IconButton onClick={() => { localStorage.clear(); router.push("/login"); }} sx={{ color: "#fff" }}>
               <LogoutIcon />
             </IconButton>
           </Box>
@@ -385,12 +285,10 @@ export default function PrivateLayout({ children }: any) {
           display: { xs: "block", md: "none" },
           "& .MuiDrawer-paper": {
             width: drawerWidth,
-            background: role === "student"
-              ? "linear-gradient(135deg, #1e3a8a, #2563eb)"
-              : role === "staff"
-                ? "linear-gradient(135deg, #9333ea, #ec4899)"
-                : "linear-gradient(135deg, #dc2626, #f97316)",
-            borderRight: "none",
+            background: drawerColor,
+            borderRight: "1px solid #374151", // ✅ dark gray border
+            boxShadow: "2px 0 6px rgba(0, 0, 0, 0.15)",
+            color: textColor,
           },
         }}
       >
@@ -404,8 +302,11 @@ export default function PrivateLayout({ children }: any) {
         sx={{
           display: { xs: "none", md: "block" },
           "& .MuiDrawer-paper": {
-            background: getRoleGradient(),
+            background: drawerColor,
+            color: textColor,
             width: open ? drawerWidth : `calc(${theme.spacing(8)} + 1px)`,
+            borderRight: "1px solid #374151", // ✅ dark gray border
+            boxShadow: "2px 0 6px rgba(0, 0, 0, 0.15)",
           },
         }}
       >
@@ -426,37 +327,6 @@ export default function PrivateLayout({ children }: any) {
       >
         {children}
       </Box>
-
-      {/* Logout Modal */}
-      {/* <CommonModal
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <Box>
-          <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
-            <WarningOutlinedIcon
-              sx={{ color: "#ff9800", height: 60, width: 60 }}
-            />
-          </Box>
-          <Typography sx={{ fontSize: "18px", textAlign: "center", mb: 2 }}>
-            Are you sure you want to logout?
-          </Typography>
-          <Box sx={{ display: "flex", justifyContent: "center", gap: 2 }}>
-            <ButtonOutlined
-              text="No"
-              padding="5px 32px"
-              onClick={() => setDialogOpen(false)}
-            />
-            <ButtonContained
-              text="Yes"
-              padding="5px 32px"
-              onClick={handleLogout}
-            />
-          </Box>
-        </Box>
-      </CommonModal> */}
     </Box>
   );
 }
