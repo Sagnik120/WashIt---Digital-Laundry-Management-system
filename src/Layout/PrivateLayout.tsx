@@ -28,6 +28,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import HistoryIcon from "@mui/icons-material/History";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import GavelIcon from "@mui/icons-material/Gavel";
+import { Notifications } from "@mui/icons-material";
 
 const drawerWidth = 300;
 
@@ -146,38 +147,13 @@ export default function PrivateLayout({ children }: any) {
     if (isMobile) setOpen(false);
   };
 
+  // Get active menu item based on pathname
+  const activeMenuItem = menuData.find((item) => pathname.startsWith(item.link));
+
   // Drawer content
   const drawer = (
     <>
       <DrawerHeader>
-        {open ? (
-          // ✅ Show user info when drawer is expanded
-          <Box
-            sx={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-              px: 2,
-            }}
-          >
-            <Avatar
-              alt="User Name"
-              src="/Assets/images/user.jpg" // replace with dynamic user profile pic
-              sx={{ width: 40, height: 40 }}
-            />
-            <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600, color: textColor }}>
-                John Doe
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#6b7280", fontSize: 13 }}>
-                Admin
-              </Typography>
-            </Box>
-          </Box>
-        ) : (
-          null
-        )}
         <IconButton onClick={handleDrawerClose} sx={{ color: textColor }}>
           {theme.direction === "rtl" ? <ChevronRightIcon /> : <ChevronLeftIcon />}
         </IconButton>
@@ -250,6 +226,7 @@ export default function PrivateLayout({ children }: any) {
       >
         <Toolbar sx={{ minHeight: "64px !important", px: 2 }}>
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+            {/* Left Section */}
             <Box display="flex" alignItems="center" gap={3}>
               <IconButton
                 color="inherit"
@@ -260,20 +237,39 @@ export default function PrivateLayout({ children }: any) {
               >
                 <MenuIcon />
               </IconButton>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Image src="/Assets/images/svg/Logo.svg" alt="Logo" width={38} height={38} />
-                <Typography fontSize="22px" sx={{ color: "white", fontWeight: 700, textShadow: "1px 1px 4px rgba(0,0,0,0.3)" }}>
-                  WashIt
+
+              {/* ✅ Dynamic Title with Icon */}
+              <Box display="flex" alignItems="center" gap={1}>
+                {activeMenuItem?.icon}
+                <Typography variant="h6" fontWeight="bold">
+                  {activeMenuItem?.name || "Laundry Dashboard"}
                 </Typography>
               </Box>
-              {/* <Image src="/Assets/images/svg/Logo.svg" alt="Logo" width={100} height={40} /> */}
             </Box>
-            <IconButton onClick={() => { localStorage.clear(); router.push("/login"); }} sx={{ color: "#fff" }}>
-              <LogoutIcon />
-            </IconButton>
+
+            {/* Right Section */}
+            <Box display="flex" alignItems="center" gap={2}>
+              <Typography variant="body1">{'Shreeval Paladiya'}</Typography>
+              <Avatar sx={{ bgcolor: "#facc15" }}>{'Shreeval'.charAt(0)}</Avatar>
+              <Tooltip title="Notifications">
+                <IconButton color="inherit">
+                  <Notifications />
+                </IconButton>
+              </Tooltip>
+              <IconButton
+                onClick={() => {
+                  localStorage.clear();
+                  router.push("/login");
+                }}
+                sx={{ color: "#fff" }}
+              >
+                <LogoutIcon />
+              </IconButton>
+            </Box>
           </Box>
         </Toolbar>
       </AppBar>
+
 
       {/* Mobile Drawer */}
       <MuiDrawer
