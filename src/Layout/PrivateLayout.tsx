@@ -128,10 +128,11 @@ export default function PrivateLayout({ children }: any) {
   const pathname = usePathname();
 
   const menuData = [
-    { name: "Profile", icon: <PersonIcon />, link: "/userProfile", isShow: true },
-    { name: "History", icon: <HistoryIcon />, link: "/events", isShow: true },
-    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/companies", isShow: true },
-    { name: "Compliant", icon: <GavelIcon />, link: "/categories", isShow: true },
+    { name: "Profile", icon: <PersonIcon />, link: "/user/userProfile", isShow: true },
+    { name: "History", icon: <HistoryIcon />, link: "/user/userHistory", isShow: true },
+    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/user/userAddEntry", isShow: true },
+    { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffScanEntry", isShow: true },
+    // { name: "Compliant", icon: <GavelIcon />, link: "/categories", isShow: true },
   ];
 
   // Light sidebar colors
@@ -314,9 +315,7 @@ export default function PrivateLayout({ children }: any) {
         component="main"
         sx={{
           flexGrow: 1,
-          px: { xs: 1, sm: 2, md: 3 },
-          pt: { xs: 10, sm: 10, md: 11 },
-          pb: { xs: 2, sm: 2, md: 3 },
+          pt: { xs: 7 },
           backgroundColor: "#f9fafb",
           minHeight: "100vh",
         }}

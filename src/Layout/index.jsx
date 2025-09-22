@@ -12,7 +12,12 @@ const ProtectedRoute = dynamic(() => import("@/routes/ProtectedRoute"), {
 
 const Layout = ({ children }) => {
   const pathname = usePathname();
-  const privateRoutes = ["/userProfile"];
+  const privateRoutes = [
+    "/user/userProfile",
+    "/user/userHistory",
+    "/user/userAddEntry",
+    "/staff/staffScanEntry",
+  ];
   const publicRoutes = [
     "/auth/login",
     "/home",
