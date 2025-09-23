@@ -25,9 +25,78 @@ const Login = () => {
   const { setSnackBar } = useSnackBar();
 
   const [role, setRole] = useState("student");
+  const [data, setData] = useState<any>({
+    email: '',
+    password: '',
+  })
+  const [errors, setErrors] = useState<any>({
+    email: "",
+    password: "",
+  });
 
-  const handleRoleChange = ({ _, newRole }: any) => {
-    if (newRole !== null) setRole(newRole);
+  const handleChangeInput = (e: any) => {
+    const { name, value } = e.target;
+    setData({ ...data, [name]: value });
+
+    // Real-time validation
+    let tempErrors: any = { ...errors };
+
+    if (name === "email") {
+      if (!value) {
+        tempErrors.email = "Email is required";
+      } else if (!/\S+@\S+\.\S+/.test(value)) {
+        tempErrors.email = "Email is invalid";
+      } else {
+        tempErrors.email = "";
+      }
+    }
+
+    if (name === "password") {
+      if (!value) {
+        tempErrors.password = "Password is required";
+      } else if (value.length < 6) {
+        tempErrors.password = "Password must be at least 6 characters";
+      } else {
+        tempErrors.password = "";
+      }
+    }
+
+    setErrors(tempErrors);
+  };
+
+  const validate = () => {
+    let tempErrors = { email: "", password: "" };
+    let isValid = true;
+
+    if (!data.email) {
+      tempErrors.email = "Email is required";
+      isValid = false;
+    } else if (!/\S+@\S+\.\S+/.test(data.email)) {
+      tempErrors.email = "Email is invalid";
+      isValid = false;
+    }
+
+    if (!data.password) {
+      tempErrors.password = "Password is required";
+      isValid = false;
+    } else if (data.password.length < 6) {
+      tempErrors.password = "Password must be at least 6 characters";
+      isValid = false;
+    }
+
+    setErrors(tempErrors);
+    return isValid;
+  };
+
+  const handleLogin = () => {
+    if (validate()) {
+      // Proceed with login
+      setSnackBar("success", "Login successful!");
+      console.log("Login data:", data);
+      // Add your login API call here
+    } else {
+      setSnackBar("error", "Please fix the errors before submitting");
+    }
   };
 
   return (
@@ -164,9 +233,14 @@ const Login = () => {
           <TextField
             fullWidth
             label="Email"
+            name='email'
             type="email"
             variant="outlined"
             margin="normal"
+            value={data?.email}
+            error={Boolean(errors?.email)}
+            helperText={errors?.email}
+            onChange={(e) => handleChangeInput(e)}
             InputLabelProps={{ style: { color: "white" } }}
             InputProps={{
               style: {
@@ -179,9 +253,14 @@ const Login = () => {
           <TextField
             fullWidth
             label="Password"
+            name='password'
             type="password"
             variant="outlined"
             margin="normal"
+            value={data?.password}
+            onChange={(e) => handleChangeInput(e)}
+            error={Boolean(errors?.password)}
+            helperText={errors?.password}
             InputLabelProps={{ style: { color: "white" } }}
             InputProps={{
               style: {
@@ -246,6 +325,7 @@ const Login = () => {
                     : "linear-gradient(135deg, #dc2626, #f97316)", // admin theme
               "&:hover": { opacity: 0.9 },
             }}
+            onClick={() => handleLogin()}
           >
             {role === "student"
               ? "Login as Student"

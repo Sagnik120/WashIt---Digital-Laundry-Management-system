@@ -1,5 +1,5 @@
 // pages/auth/register.jsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     Typography,
     TextField,
@@ -10,24 +10,52 @@ import {
     CardContent,
     Autocomplete,
     Paper,
+    useTheme,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
 import AuthWrapper from "@/Components/AuthLayout/AuthLayout";
 import LocalLaundryServiceIcon from "@mui/icons-material/LocalLaundryService";
+import usePageLoader from "@/Redux/hooks/usePageLoader";
+import useSnackBar from "@/Redux/hooks/useSnackBar";
+import { useDispatch } from "react-redux";
+
+const DarkPaper = (props: any) => (
+    <Paper
+        {...props}
+        sx={{
+            backgroundColor: "rgba(30,41,59,0.95)", // dark bluish background
+            color: "white",
+            "& .MuiAutocomplete-option": {
+                color: "white",
+                "&[aria-selected='true']": {
+                    backgroundColor: "rgba(59,130,246,0.3)", // selected bg
+                },
+                "&:hover": {
+                    backgroundColor: "rgba(59,130,246,0.5)", // hover bg
+                },
+            },
+        }}
+    />
+);
 
 const Register = () => {
+    const dispatch = useDispatch();
+    const theme = useTheme();
     const router = useRouter();
+    const setFullPageLoader = usePageLoader();
+    const { setSnackBar } = useSnackBar();
+
     const [role, setRole] = useState("student");
     const [hostel, setHostel] = useState<any>('Hostel A');
 
-    const [email, setEmail] = useState("");
+    // const [email, setEmail] = useState("");
     const [otp, setOtp] = useState("");
     const [isOtpSent, setIsOtpSent] = useState(false);
     const [isVerified, setIsVerified] = useState(false);
 
     const handleSendOtp = async () => {
         // API call to send OTP
-        console.log("OTP sent to", email);
+        console.log("OTP sent to", data?.email);
         setIsOtpSent(true);
     };
 
@@ -35,30 +63,224 @@ const Register = () => {
         // API call to verify OTP
         if (otp === "123456") {
             setIsVerified(true);
+            setIsOtpSent(false);
+            setOtp('');
             alert("✅ Email verified!");
         } else {
+            setIsOtpSent(false);
+            setOtp('');
             alert("❌ Invalid OTP!");
         }
     };
 
-    const DarkPaper = (props: any) => (
-        <Paper
-            {...props}
-            sx={{
-                backgroundColor: "rgba(30,41,59,0.95)", // dark bluish background
-                color: "white",
-                "& .MuiAutocomplete-option": {
-                    color: "white",
-                    "&[aria-selected='true']": {
-                        backgroundColor: "rgba(59,130,246,0.3)", // selected bg
-                    },
-                    "&:hover": {
-                        backgroundColor: "rgba(59,130,246,0.5)", // hover bg
-                    },
-                },
-            }}
-        />
-    );
+    const [data, setData] = useState<any>({
+        name: '',
+        rollNo: '',
+        email: '',
+        hostel: '',
+        roomNo: '',
+        password: '',
+        confirmPassword: '',
+        staffCode: '',
+    })
+    const [errors, setErrors] = useState<any>({
+        name: '',
+        rollNo: '',
+        email: '',
+        hostel: '',
+        roomNo: '',
+        password: '',
+        confirmPassword: '',
+        staffCode: '',
+    });
+
+    const handleChangeInput = (e: any, name1?: any, newValue?: any) => {
+        const { name, value } = e.target;
+        console.log(name, 'name')
+        if (newValue) {
+            setData({ ...data, [name1]: newValue });
+        } else {
+            setData({ ...data, [name]: value });
+        }
+
+        // Real-time validation
+        let tempErrors: any = { ...errors };
+
+        if (name === "name") {
+            if (!value) {
+                tempErrors.name = "Name is required";
+            } else {
+                tempErrors.name = "";
+            }
+        }
+
+        if (name === "email") {
+            if (!value) {
+                tempErrors.email = "Email is required";
+            } else if (!/\S+@\S+\.\S+/.test(value)) {
+                tempErrors.email = "Email is invalid";
+            } else {
+                tempErrors.email = "";
+            }
+        }
+
+        if (name === "password") {
+            if (!value) {
+                tempErrors.password = "Password is required";
+            } else if (value.length < 6) {
+                tempErrors.password = "Password must be at least 6 characters";
+            } else {
+                tempErrors.password = "";
+            }
+        }
+
+        if (name === "confirmPassword") {
+            if (!value) {
+                tempErrors.confirmPassword = "Confirm password is required";
+            } else if (data?.password !== value) {
+                tempErrors.confirmPassword = "Confirm password must be equal to new password";
+            } else {
+                tempErrors.confirmPassword = "";
+            }
+        }
+
+        if (name === "rollNo") {
+            if (!value) {
+                tempErrors.rollNo = "Roll number is required";
+            } else {
+                tempErrors.rollNo = "";
+            }
+        }
+
+        if (name1 === "hostel") {
+            if (!newValue) {
+                tempErrors.hostel = "Hostel is required";
+            } else {
+                tempErrors.hostel = "";
+            }
+        }
+
+        if (name === "roomNo") {
+            if (!value) {
+                tempErrors.roomNo = "Room number is required";
+            } else {
+                tempErrors.roomNo = "";
+            }
+        }
+
+        if (name === "staffCode") {
+            if (!value) {
+                tempErrors.staffCode = "Staff Code is required";
+            } else {
+                tempErrors.staffCode = "";
+            }
+        }
+
+        setErrors(tempErrors);
+    };
+
+    const validate = () => {
+        let tempErrors = {
+            name: '',
+            rollNo: '',
+            email: '',
+            hostel: '',
+            roomNo: '',
+            password: '',
+            confirmPassword: '',
+            staffCode: ''
+        };
+        let isValid = true;
+
+
+        if (!data?.name) {
+            tempErrors.name = "Name is required";
+            isValid = false;
+        }
+
+        if (!data?.email) {
+            tempErrors.email = "Email is required";
+            isValid = false;
+        } else if (!/\S+@\S+\.\S+/.test(data?.email)) {
+            tempErrors.email = "Email is invalid";
+            isValid = false;
+        }
+
+        if (!data?.password) {
+            tempErrors.password = "Password is required";
+            isValid = false;
+        } else if (data?.length < 6) {
+            tempErrors.password = "Password must be at least 6 characters";
+            isValid = false;
+        }
+
+        if (!data?.confirmPassword) {
+            tempErrors.confirmPassword = "Confirm password is required";
+            isValid = false;
+        } else if (data?.password !== data?.confirmPassword) {
+            tempErrors.confirmPassword = "Confirm password must be equal to new password";
+            isValid = false;
+        }
+
+
+        if (!data?.rollNo && role === "student") {
+            tempErrors.rollNo = "Roll Number is required";
+            isValid = false;
+        }
+        if (!data?.hostel && role === "student") {
+            tempErrors.hostel = "Hostel is required";
+            isValid = false;
+        }
+        if (!data?.roomNo && role === "student") {
+            tempErrors.roomNo = "Room Number is required";
+            isValid = false;
+        }
+
+        if (!data?.staffCode && role === "staff") {
+            tempErrors.staffCode = "staff Code is required";
+            isValid = false;
+        }
+
+        setErrors(tempErrors);
+        return isValid;
+    };
+
+    const handleSubmit = () => {
+        if (validate()) {
+            // Proceed with login
+            setSnackBar("success", "Registered successfully!");
+            console.log("Login data:", data);
+            // Add your login API call here
+        } else {
+            setSnackBar("error", "Please fix the errors before submitting");
+        }
+    };
+
+    useEffect(() => {
+        setData({
+            name: '',
+            rollNo: '',
+            email: '',
+            hostel: '',
+            roomNo: '',
+            password: '',
+            confirmPassword: '',
+            staffCode: '',
+        })
+        setErrors({
+            name: '',
+            rollNo: '',
+            email: '',
+            hostel: '',
+            roomNo: '',
+            password: '',
+            confirmPassword: '',
+            staffCode: '',
+        })
+        setIsVerified(false)
+        setIsOtpSent(false)
+        setOtp('')
+    }, [role])
 
     return (
         <AuthWrapper>
@@ -168,6 +390,11 @@ const Register = () => {
                                 fullWidth
                                 label="Full Name"
                                 type="text"
+                                name='name'
+                                value={data?.name}
+                                error={Boolean(errors?.name)}
+                                helperText={errors?.name}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 InputLabelProps={{ style: { color: "white" } }}
@@ -188,6 +415,11 @@ const Register = () => {
                                 fullWidth
                                 label="Roll Number"
                                 type="text"
+                                name='rollNo'
+                                value={data?.rollNo}
+                                error={Boolean(errors?.rollNo)}
+                                helperText={errors?.rollNo}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 required
@@ -211,7 +443,11 @@ const Register = () => {
                                     type="email"
                                     variant="outlined"
                                     margin="normal"
-                                    onChange={(e) => setEmail(e.target.value)}
+                                    name='email'
+                                    value={data?.email}
+                                    error={Boolean(errors?.email)}
+                                    helperText={errors?.email}
+                                    onChange={(e) => isOtpSent ? {} : handleChangeInput(e)}
                                     disabled={isVerified}
                                     required
                                     InputLabelProps={{ style: { color: "white" } }}
@@ -227,15 +463,16 @@ const Register = () => {
                             {/* Send OTP button */}
 
                             {!isVerified && (
-                                <Grid item sm={2} xs={12} sx={{ alignContent: 'center' }}>
+                                <Grid item sm={2} xs={12}>
                                     <Button
                                         variant="contained"
                                         sx={{
+                                            mt: 3,
                                             borderRadius: "50px",
                                             background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
                                         }}
                                         onClick={handleSendOtp}
-                                        disabled={!email}
+                                        disabled={!data?.email}
                                     >
                                         Send OTP
                                     </Button>
@@ -268,7 +505,6 @@ const Register = () => {
                                         variant="contained"
                                         sx={{
                                             mt: 1,
-                                            mb: 2,
                                             borderRadius: "50px",
                                             background: "linear-gradient(135deg, #22c55e, #16a34a)",
                                         }}
@@ -290,16 +526,21 @@ const Register = () => {
                                     "Hostel D",
                                     "Hostel E",
                                 ]}
-                                value={hostel} // state variable
+                                // value={hostel} // state variable
                                 PaperComponent={DarkPaper}
-                                onChange={(e, newValue) => setHostel(newValue)}
+                                value={data?.hostel}
+                                onChange={(e, newValue) => handleChangeInput(e, 'hostel', newValue)}
+                                // onChange={(e, newValue) => setHostel(newValue)}
                                 renderInput={(params) => (
                                     <TextField
                                         {...params}
                                         label="Hostel"
+                                        name='hostel'
                                         margin="normal"
                                         required
                                         variant="outlined"
+                                        error={Boolean(errors?.hostel)}
+                                        helperText={errors?.hostel}
                                         InputLabelProps={{ style: { color: "white" } }}
                                         InputProps={{
                                             ...params.InputProps,
@@ -320,6 +561,11 @@ const Register = () => {
                                 fullWidth
                                 label="Hostel Room Number"
                                 type="text"
+                                name='roomNo'
+                                value={data?.roomNo}
+                                error={Boolean(errors?.roomNo)}
+                                helperText={errors?.roomNo}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 required
@@ -340,6 +586,11 @@ const Register = () => {
                                 fullWidth
                                 label="Password"
                                 type="password"
+                                name='password'
+                                value={data?.password}
+                                error={Boolean(errors?.password)}
+                                helperText={errors?.password}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 required
@@ -360,6 +611,11 @@ const Register = () => {
                                 fullWidth
                                 label="Confirm Password"
                                 type="password"
+                                name='confirmPassword'
+                                value={data?.confirmPassword}
+                                error={Boolean(errors?.confirmPassword)}
+                                helperText={errors?.confirmPassword}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 required
@@ -379,6 +635,11 @@ const Register = () => {
                                 fullWidth
                                 label="Full Name"
                                 type="text"
+                                name='name'
+                                value={data?.name}
+                                error={Boolean(errors?.name)}
+                                helperText={errors?.name}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 InputLabelProps={{ style: { color: "white" } }}
@@ -402,7 +663,11 @@ const Register = () => {
                                     type="email"
                                     variant="outlined"
                                     margin="normal"
-                                    onChange={(e) => setEmail(e.target.value)}
+                                    name='email'
+                                    value={data?.email}
+                                    error={Boolean(errors?.email)}
+                                    helperText={errors?.email}
+                                    onChange={(e) => isOtpSent ? {} : handleChangeInput(e)}
                                     disabled={isVerified}
                                     required
                                     InputLabelProps={{ style: { color: "white" } }}
@@ -418,15 +683,16 @@ const Register = () => {
                             {/* Send OTP button */}
 
                             {!isVerified && (
-                                <Grid item sm={2} xs={12} sx={{ alignContent: 'center' }}>
+                                <Grid item sm={2} xs={12}>
                                     <Button
                                         variant="contained"
                                         sx={{
+                                            mt: 3,
                                             borderRadius: "50px",
                                             background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
                                         }}
                                         onClick={handleSendOtp}
-                                        disabled={!email}
+                                        disabled={!data?.email}
                                     >
                                         Send OTP
                                     </Button>
@@ -459,7 +725,6 @@ const Register = () => {
                                         variant="contained"
                                         sx={{
                                             mt: 1,
-                                            mb: 2,
                                             borderRadius: "50px",
                                             background: "linear-gradient(135deg, #22c55e, #16a34a)",
                                         }}
@@ -478,6 +743,11 @@ const Register = () => {
                                 fullWidth
                                 label="Staff Code"
                                 type="text"
+                                name='staffCode'
+                                value={data?.staffCode}
+                                error={Boolean(errors?.staffCode)}
+                                helperText={errors?.staffCode}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 required
@@ -498,6 +768,11 @@ const Register = () => {
                                 fullWidth
                                 label="Password"
                                 type="password"
+                                name='password'
+                                value={data?.password}
+                                error={Boolean(errors?.password)}
+                                helperText={errors?.password}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 required
@@ -518,6 +793,11 @@ const Register = () => {
                                 fullWidth
                                 label="Confirm Password"
                                 type="password"
+                                name='confirmPassword'
+                                value={data?.confirmPassword}
+                                error={Boolean(errors?.confirmPassword)}
+                                helperText={errors?.confirmPassword}
+                                onChange={(e) => handleChangeInput(e)}
                                 variant="outlined"
                                 margin="normal"
                                 required
@@ -547,6 +827,7 @@ const Register = () => {
                                 : "linear-gradient(135deg, #9333ea, #ec4899)",
                         "&:hover": { opacity: 0.9 },
                     }}
+                    onClick={() => handleSubmit()}
                 >
                     {role === "student" ? "Register as Student" : "Register as Staff"}
                 </Button>

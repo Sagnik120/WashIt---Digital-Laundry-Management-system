@@ -100,7 +100,6 @@ export default function StudentDashboard() {
                     backgroundAttachment: "fixed",
                 }}
             >
-
                 <Typography variant="h4" fontWeight="bold" gutterBottom color="primary" mb={3}>
                     {greeting}, {profile.name.split(" ")[0]} 👋
                 </Typography>
