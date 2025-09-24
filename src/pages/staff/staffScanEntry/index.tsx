@@ -1,0 +1,182 @@
+"use client";
+import React, { useState } from "react";
+import dynamic from "next/dynamic";
+import { Box, Typography, Button, Stack } from "@mui/material";
+import { UploadFile } from "@mui/icons-material";
+
+// Dynamic import for react-qr-reader (client-side only)
+const QrReader = dynamic(
+    () => import("react-qr-reader").then((mod) => mod.QrReader || mod),
+    { ssr: false }
+);
+
+export default function StaffScanEntry() {
+    const [scanData, setScanData] = useState<string | null>(null);
+    const [imageScanData, setImageScanData] = useState<string | null>(null);
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const img = new Image();
+            img.src = reader.result as string;
+            img.onload = async () => {
+                try {
+                    const jsQR = (await import("jsqr")).default;
+                    const canvas = document.createElement("canvas");
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext("2d");
+                    ctx?.drawImage(img, 0, 0);
+                    const imageData = ctx?.getImageData(0, 0, img.width, img.height);
+                    const code = imageData && jsQR(imageData.data, img.width, img.height);
+                    if (code) setImageScanData(code.data);
+                    else setImageScanData("No QR code found in image.");
+                } catch (err) {
+                    console.error(err);
+                    setImageScanData("Failed to read QR code.");
+                }
+            };
+        };
+        reader.readAsDataURL(file);
+    };
+
+    return (
+        <Box
+            sx={{
+                px: { xs: 2, md: 4 },
+                py: 4,
+                minHeight: "90vh",
+                background: "linear-gradient(180deg, #f0f4f8 0%, #e0f2fe 100%)",
+            }}
+        >
+            <Typography variant="h4" fontWeight="bold" gutterBottom color="primary">
+                🧾 Staff QR Scan
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={4}>
+                Scan QR codes from user-generated laundry entries using your camera or upload an image.
+            </Typography>
+
+            <Stack spacing={6} alignItems="center">
+
+                {/* Camera Scan Card */}
+                <Box
+                    sx={{
+                        width: "100%",
+                        maxWidth: 480,
+                        p: 3,
+                        borderRadius: 3,
+                        bgcolor: "#fef3c7",
+                        boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
+                        textAlign: "center",
+                    }}
+                >
+                    <Typography variant="h6" fontWeight={600} mb={2}>
+                        📷 Scan with Camera
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" mb={2}>
+                        Use your device camera to scan QR codes in real-time.
+                    </Typography>
+
+                    <Box sx={{ position: "relative", borderRadius: 2, overflow: "hidden", background: "#000" }}>
+                        <QrReader
+                            constraints={{ facingMode: "environment" }}
+                            onResult={(result, error) => {
+                                if (result) setScanData(result.getText());
+                                if (error) console.error(error);
+                            }}
+                        />
+
+                        {/* Overlay scanning frame */}
+                        <Box
+                            sx={{
+                                position: "absolute",
+                                top: "50%",
+                                left: "50%",
+                                width: "60%",
+                                height: "60%",
+                                transform: "translate(-50%, -50%)",
+                                border: "3px dashed rgba(255,255,255,0.7)",
+                                borderRadius: 2,
+                                pointerEvents: "none",
+                            }}
+                        >
+                            <Box
+                                sx={{
+                                    position: "absolute",
+                                    top: 0,
+                                    left: 0,
+                                    width: "100%",
+                                    height: "3px",
+                                    background: "rgba(37,99,235,0.8)",
+                                    animation: "scan 2s linear infinite",
+                                }}
+                            />
+                        </Box>
+                    </Box>
+                    {scanData && <Typography mt={2}>✅ Scanned: {scanData}</Typography>}
+                </Box>
+
+                {/* Upload Image Card */}
+                <Box
+                    sx={{
+                        width: "100%",
+                        maxWidth: 480,
+                        p: 3,
+                        borderRadius: 3,
+                        bgcolor: "#e0c3fc",
+                        boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
+                        textAlign: "center",
+                    }}
+                >
+                    <Typography variant="h6" fontWeight={600} mb={2}>
+                        🖼 Upload Image
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" mb={2}>
+                        Upload a QR code image to scan.
+                    </Typography>
+
+                    <Button
+                        variant="contained"
+                        component="label"
+                        startIcon={<UploadFile />}
+                        sx={{
+                            borderRadius: 3,
+                            px: 4,
+                            py: 1.5,
+                            background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
+                            color: "#fff",
+                            fontWeight: 600,
+                            "&:hover": {
+                                background: "linear-gradient(135deg,#1e40af,#1e3a8a)",
+                            },
+                        }}
+                    >
+                        Upload Image
+                        <input type="file" accept="image/*" hidden onChange={handleImageUpload} />
+                    </Button>
+
+                    {imageScanData && <Typography mt={2}>✅ Scanned: {imageScanData}</Typography>}
+                </Box>
+            </Stack>
+
+
+            {/* Animation keyframes */}
+            <style jsx>{`
+        @keyframes scan {
+          0% {
+            top: 0;
+          }
+          50% {
+            top: calc(100% - 3px);
+          }
+          100% {
+            top: 0;
+          }
+        }
+      `}</style>
+        </Box>
+    );
+}
