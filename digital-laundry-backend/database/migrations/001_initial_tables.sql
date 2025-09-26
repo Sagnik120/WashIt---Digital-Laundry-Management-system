@@ -16,8 +16,21 @@ CREATE TABLE IF NOT EXISTS users (
     department_name VARCHAR(100),
     passing_year INTEGER,
     profile_picture TEXT,
-    laundry_id VARCHAR(50) UNIQUE,
+    laundry_id VARCHAR(50) UNIQUE DEFAULT NULL,
     is_verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE IF NOT EXISTS staff (
+    id SERIAL PRIMARY KEY,
+    staff_code VARCHAR(20) UNIQUE NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'staff',
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -40,10 +53,15 @@ CREATE TABLE IF NOT EXISTS laundry_orders (
     id SERIAL PRIMARY KEY,
     order_id VARCHAR(50) UNIQUE NOT NULL,
     student_id INTEGER REFERENCES users(id) NOT NULL,
+    student_name VARCHAR(255) NOT NULL, -- Add student name for quick access
+    hostel_name VARCHAR(10) NOT NULL, -- Add hostel for quick access
+    room_number VARCHAR(10) NOT NULL, -- Add room for quick access
+    laundry_id VARCHAR(50) NOT NULL, -- Add laundry_id for tracking
     status order_status DEFAULT 'in progress',
     submission_date DATE NOT NULL,
     completed_at TIMESTAMP,
     completed_by INTEGER REFERENCES users(id),
+    total_items INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -52,6 +70,7 @@ CREATE TABLE IF NOT EXISTS order_items (
     order_id INTEGER REFERENCES laundry_orders(id) ON DELETE CASCADE,
     item_id INTEGER REFERENCES laundry_items(id),
     quantity INTEGER NOT NULL CHECK (quantity > 0),
+    item_name VARCHAR(100) NOT NULL, 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

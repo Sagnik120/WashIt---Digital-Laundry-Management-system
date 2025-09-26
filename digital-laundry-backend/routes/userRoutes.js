@@ -1,16 +1,16 @@
-const express = require('express');
-const userController = require('../controllers/userController');
-const { validateUpdateProfile } = require('../middleware/validationMiddleware');
-const { authenticateToken, authorizeRoles } = require('../middleware/authMiddleware');
-
+import express from 'express';
+import userController from '../controller/userController.js'
 const router = express.Router();
 
-// All authenticated users can access these routes
-router.get('/profile', authenticateToken, userController.getProfile);
-router.put('/profile', authenticateToken, validateUpdateProfile, userController.updateProfile);
+router.post('/studentRegister',userController.studentRegister);
+router.post('/staffRegister',userController.staffRegister);
+router.post('/studentLogin',userController.loginUser);
 
-// Staff and Admin routes
-router.get('/students/:hostelName', authenticateToken, authorizeRoles('staff', 'admin'), userController.getStudentsByHostel);
-router.get('/staff', authenticateToken, authorizeRoles('admin'), userController.getAllStaff);
 
-module.exports = router;
+// Add this simple test route first
+router.get('/test', (req, res) => {
+    res.json({ message: 'User routes are working!' });
+});
+
+
+export default router;

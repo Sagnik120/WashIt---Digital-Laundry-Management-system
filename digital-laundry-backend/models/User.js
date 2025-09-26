@@ -1,123 +1,105 @@
-const { query } = require('../config/database');
+import db from '../config/database.js';
 
 class User {
-  static async create(userData) {
-    const {
-      email, password, full_name, role, roll_number, hostel_name, 
-      room_number, phone_number, department_name, passing_year, 
-      profile_picture, laundry_id
-    } = userData;
-
-    const result = await query(
-      `INSERT INTO users (
-        email, password, full_name, role, roll_number, hostel_name, 
-        room_number, phone_number, department_name, passing_year, 
-        profile_picture, laundry_id, is_verified
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
-      RETURNING *`,
-      [
-        email, password, full_name, role, roll_number, hostel_name,
+  static async findById(userId) {
+    const query = `
+      SELECT 
+        id, email, full_name, role, roll_number, hostel_name, 
         room_number, phone_number, department_name, passing_year,
-        profile_picture, laundry_id, role === 'admin' ? true : false
-      ]
-    );
-
+        profile_picture, laundry_id, is_verified, created_at
+      FROM users 
+      WHERE id = $1
+    `;
+    
+    const result = await db.query(query, [userId]);
     return result.rows[0];
   }
 
-  static async findByEmail(email) {
-    const result = await query(
-      'SELECT * FROM users WHERE email = $1',
-      [email]
-    );
-    return result.rows[0];
-  }
-
-  static async findById(id) {
-    const result = await query(
-      'SELECT * FROM users WHERE id = $1',
-      [id]
-    );
-    return result.rows[0];
-  }
-
-  static async findByLaundryId(laundryId) {
-    const result = await query(
-      'SELECT * FROM users WHERE laundry_id = $1',
-      [laundryId]
-    );
-    return result.rows[0];
-  }
-
-  static async updateProfile(id, updateData) {
+  static async updateProfile(userId, updateData) {
     const {
-      full_name, roll_number, email, hostel_name, room_number,
-      department_name, passing_year, phone_number, profile_picture
+      fullName, roll_number, hostel_name, room_number, 
+      phone_number, department_name, passing_year
     } = updateData;
 
-    const result = await query(
-      `UPDATE users SET 
-        full_name = $1, roll_number = $2, email = $3, hostel_name = $4,
-        room_number = $5, department_name = $6, passing_year = $7,
-        phone_number = $8, profile_picture = $9, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $10 RETURNING *`,
-      [
-        full_name, roll_number, email, hostel_name, room_number,
-        department_name, passing_year, phone_number, profile_picture, id
-      ]
-    );
+    const query = `
+      UPDATE users 
+      SET 
+        full_name = $1, roll_number = $2, hostel_name = $3, 
+        room_number = $4, phone_number = $5, department_name = $6, 
+        passing_year = $7, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $8
+      RETURNING *
+    `;
+
+    const result = await db.query(query, [
+      full_name, roll_number, hostel_name, room_number,
+      phone_number, department_name, passing_year, userId
+    ]);
 
     return result.rows[0];
   }
 
-  static async updatePassword(id, newPassword) {
-    const result = await query(
-      'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-      [newPassword, id]
-    );
-    return result.rows[0];
+  // New method to get profile by user ID
+  static async getProfile(userId) {
+    try {
+      const query = `
+        SELECT 
+          id, email, full_name, role, roll_number, hostel_name, 
+          room_number, phone_number, department_name, passing_year,
+          profile_picture, laundry_id, is_verified, created_at, updated_at
+        FROM users 
+        WHERE id = $1
+      `;
+      
+      const result = await db.query(query, [userId]);
+      return result.rows[0];
+    } catch (error) {
+      throw error;
+    }
   }
 
-  static async verifyEmail(email) {
-    const result = await query(
-      'UPDATE users SET is_verified = true WHERE email = $1 RETURNING *',
-      [email]
-    );
-    return result.rows[0];
-  }
+  // New method to update profile with dynamic fields
+  static async updateUserProfile(userId, updateFields) {
+    try {
+      const allowedFields = [
+        'full_name', 'roll_number', 'hostel_name', 'room_number',
+        'phone_number', 'department_name', 'passing_year', 'profile_picture'
+      ];
+      
+      const setClauses = [];
+      const values = [];
+      let paramCount = 1;
 
-  static async getStudentsByHostel(hostelName) {
-    const result = await query(
-      'SELECT id, full_name, roll_number, email, room_number, laundry_id FROM users WHERE role = $1 AND hostel_name = $2',
-      ['student', hostelName]
-    );
-    return result.rows;
-  }
+      // Build dynamic update query
+      Object.keys(updateFields).forEach(field => {
+        if (allowedFields.includes(field) && updateFields[field] !== undefined) {
+          setClauses.push(`${field} = $${paramCount}`);
+          values.push(updateFields[field]);
+          paramCount++;
+        }
+      });
 
-  static async getAllStaff() {
-    const result = await query(
-      'SELECT id, full_name, email, created_at FROM users WHERE role = $1',
-      ['staff']
-    );
-    return result.rows;
-  }
+      if (setClauses.length === 0) {
+        throw new Error('No valid fields to update');
+      }
 
-  static async updateLaundryId(id, laundryId) {
-    const result = await query(
-        'UPDATE users SET laundry_id = $1 WHERE id = $2 RETURNING *',
-        [laundryId, id]
-    );
-    return result.rows[0];
+      // Add updated_at and user_id
+      setClauses.push('updated_at = CURRENT_TIMESTAMP');
+      values.push(userId);
+
+      const query = `
+        UPDATE users 
+        SET ${setClauses.join(', ')}
+        WHERE id = $${paramCount}
+        RETURNING *
+      `;
+
+      const result = await db.query(query, values);
+      return result.rows[0];
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
-  static async getStudentCountByHostel() {
-    const result = await query(
-      `SELECT hostel_name, COUNT(*) as student_count 
-       FROM users WHERE role = 'student' 
-       GROUP BY hostel_name`
-    );
-    return result.rows;
-  }
-}
-
-module.exports = User;
+export default User;

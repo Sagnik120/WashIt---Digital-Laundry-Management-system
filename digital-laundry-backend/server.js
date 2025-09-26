@@ -1,73 +1,35 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+import express from 'express';
+const server = express();
+import cors from 'cors';
+import UserRouter from './routes/userRoutes.js'
+import db from './config/database.js';
+import ProfileRouter from './routes/profileRoutes.js';
+import OrderRouter from './routes/orderRoutes.js';
+import dotenv from 'dotenv';
+import staffCodeRoutes from './routes/staffCodeRoutes.js';
+import staffOrderRoutes from './routes/staffOrderRoutes.js';
 
-const { verifyEmailConnection } = require('./config/email');
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-const adminRoutes = require('./routes/adminRoutes');
-const setupDatabase = require('./database/setup');
+dotenv.config();
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+server.use(express.json());
+server.use(express.urlencoded({ extended: false }));
+server.use(cors());
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/admin', adminRoutes);
+server.use('/api/auth', UserRouter);
+server.use('/api/profile', ProfileRouter);
+server.use('/api/orders', OrderRouter);
+server.use('/api/staff', staffOrderRoutes);
+server.use('/api/staff-codes', staffCodeRoutes);
 
-// Health check route
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Digital Laundry Management System API is running',
-    timestamp: new Date().toISOString()
-  });
+// Test route
+server.get('/api/test', (req, res) => {
+    res.json({ message: 'Server is working!' });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found'
-  });
-});
 
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('Error:', error);
-  res.status(500).json({
-    success: false,
-    message: 'Internal server error',
-    error: process.env.NODE_ENV === 'development' ? error.message : undefined
-  });
-});
-
-// Start server with database setup
-const startServer = async () => {
-  try {
-    // Setup database tables
-    await setupDatabase();
-    
-    // Start the server
-    app.listen(PORT, async () => {
-      console.log(`Server is running on port ${PORT}`);
-      console.log(`Health check: http://localhost:${PORT}/api/health`);
-      await verifyEmailConnection();
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-startServer();
-
-module.exports = app;
+server.use('/api/',UserRouter);
+server.listen( 5550, () => {
+    console.log('server started');
+})

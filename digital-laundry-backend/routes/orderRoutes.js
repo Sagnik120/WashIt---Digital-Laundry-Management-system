@@ -1,22 +1,25 @@
-const express = require('express');
-const orderController = require('../controllers/orderController');
-const { validateCreateOrder } = require('../middleware/validationMiddleware');
-const { authenticateToken, authorizeRoles } = require('../middleware/authMiddleware');
+import express from 'express';
+import orderController from '../controller/orderController.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Public route (for getting laundry items)
+// Apply authentication middleware to all order routes
+router.use(authMiddleware);
+
+// POST /api/orders/submit - Submit new laundry order
+router.post('/submit', orderController.submitOrder);
+
+// GET /api/orders/items - Get all available laundry items
 router.get('/items', orderController.getLaundryItems);
 
-// Student routes
-router.post('/create', authenticateToken, authorizeRoles('student'), validateCreateOrder, orderController.createOrder);
-router.get('/history', authenticateToken, authorizeRoles('student'), orderController.getOrderHistory);
-router.get('/details/:orderId', authenticateToken, orderController.getOrderDetails);
+// GET /api/orders/history - Get order history for student
+router.get('/history', orderController.getOrderHistory);
 
-// Staff routes
-router.post('/scan', authenticateToken, authorizeRoles('staff'), orderController.scanOrder);
-router.get('/hostel/:hostelName', authenticateToken, authorizeRoles('staff'), orderController.getOrdersByHostel);
-router.put('/:orderId/complete', authenticateToken, authorizeRoles('staff'), orderController.updateOrderStatus);
-router.get('/:orderId/items', authenticateToken, orderController.getOrderItems);
+// GET /api/orders/laundry/:laundryId - Get order by laundry ID
+router.get('/laundry/:laundryId', orderController.getOrderByLaundryId);
 
-module.exports = router;
+// GET /api/orders/:orderId - Get specific order details
+router.get('/:orderId', orderController.getOrderDetails);
+
+export default router;
