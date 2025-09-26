@@ -2,7 +2,6 @@
 
 ![WashIt Banner](https://img.shields.io/badge/WashIt-Digital%20Laundry%20Management-blue)
 ![Version](https://img.shields.io/badge/version-1.0.0-green)
-![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13%2B-blue)
 
