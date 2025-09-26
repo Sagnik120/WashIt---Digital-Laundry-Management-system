@@ -15,7 +15,7 @@ import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import LocalLaundryServiceIcon from "@mui/icons-material/LocalLaundryService";
 import AuthWrapper from "../../../Components/AuthLayout/AuthLayout";
-import { loginFunction } from "../../../Redux/Actions/AuthUser";
+import { loginFunction, studentLoginAction } from "../../../Redux/Actions/AuthUser";
 import ErrorHandler from "../../../lib/errorHandler";
 
 const Login = () => {
@@ -102,6 +102,8 @@ const Login = () => {
   // };
 
   const handleSubmit = async () => {
+    console.log
+    ("function called sumbit")
     const isFormValid = await validate();
     if (!isFormValid) return;
 
@@ -127,8 +129,9 @@ const Login = () => {
           // };
           // cookieUtils.setCookie('userData', safeUserData, 1);
           // cookieUtils.setCookie('token', res?.payload?.data?.token, 1);
+          localStorage.setItem("role", res.payload.user.role)
           setSnackBar('success', res.payload.message);
-          router.push('/users');
+          router.push('/user/userProfile');
         }
       })
       .catch((err: any) => {
@@ -139,6 +142,32 @@ const Login = () => {
         setFullPageLoader(false);
       });
   };
+
+  function handleStaffLogin() {
+    console.log("staff login")
+    const payload = {
+      email: data?.email,
+      password: data?.password,
+    };
+
+    dispatch(studentLoginAction(payload))
+      .then((res : any) => {
+        const ok = ErrorHandler(res, setSnackBar);
+        console.log("res:", res);
+        if (ok) {
+          setSnackBar("success", "Login successfully");
+          localStorage.setItem("role" , res.payload.user.role)
+          router.push("/staff/staffOrder")
+        }
+      })
+      .catch((err : any) => {
+        setSnackBar("error", err.message);
+      })
+      .finally(() => {
+        setFullPageLoader(false);
+      });
+  }
+
 
   return (
     <AuthWrapper>
@@ -366,7 +395,7 @@ const Login = () => {
                     : "linear-gradient(135deg, #dc2626, #f97316)", // admin theme
               "&:hover": { opacity: 0.9 },
             }}
-            onClick={() => handleSubmit()}
+            onClick={role === 'student' ? () => handleSubmit() : role === 'staff' ?()=> handleStaffLogin() : ()=>handleSubmit()}
           >
             {role === "student"
               ? "Login as Student"

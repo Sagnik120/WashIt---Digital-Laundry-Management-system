@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import { styled, useTheme } from "@mui/material/styles";
@@ -122,19 +122,25 @@ const Drawer = styled(MuiDrawer, {
 export default function PrivateLayout({ children }: any) {
   const theme = useTheme();
   const [open, setOpen] = useState<any>(false);
+  const [role , setRole] = useState("")
 
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const router = useRouter();
   const pathname = usePathname();
 
   const menuData = [
-    { name: "Profile", icon: <PersonIcon />, link: "/user/userProfile", isShow: true },
-    { name: "History", icon: <HistoryIcon />, link: "/user/userHistory", isShow: true },
-    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/user/userAddEntry", isShow: true },
-    { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffScanEntry", isShow: true },
-    { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffOrder", isShow: true },
+    { name: "Profile", icon: <PersonIcon />, link: "/user/userProfile", isShow: role === 'student' ? true : false },
+    { name: "History", icon: <HistoryIcon />, link: "/user/userHistory", isShow: role === 'student' ? true : false },
+    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/user/userAddEntry", isShow: role === 'student' ? true : false },
+    { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffScanEntry", isShow: role === 'staff' ? true : false },
+    { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffOrder", isShow: role === 'staff' ? true : false },
     // { name: "Compliant", icon: <GavelIcon />, link: "/categories", isShow: true },
   ];
+
+  useEffect(()=>{
+    let role :any = localStorage.getItem("role")
+    setRole(role)
+  },[])
 
   // Light sidebar colors
   const drawerColor = "#f3f4f6"; // Light gray background
@@ -251,7 +257,7 @@ export default function PrivateLayout({ children }: any) {
 
             {/* Right Section */}
             <Box display="flex" alignItems="center" gap={2}>
-              <Typography variant="body1">{'Shreeval Paladiya'}</Typography>
+              <Typography variant="body1">{'Sagnik'}</Typography>
               <Avatar sx={{ bgcolor: "#facc15" }}>{'Shreeval'.charAt(0)}</Avatar>
               <Tooltip title="Notifications">
                 <IconButton color="inherit">

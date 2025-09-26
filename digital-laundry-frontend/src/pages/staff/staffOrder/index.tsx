@@ -38,7 +38,121 @@ const generateData = (num: number) =>
         status: ["Pending", "In Progress", "Completed"][i % 3],
     }));
 
-const staffData = generateData(30);
+// Sample Static Data
+const staffData = [
+    {
+        id: "ORD1001",
+        user: "Shreeval Paladiya",
+        date: "2025-09-02",
+        items: [
+            { name: "Shirts", qty: 4 },
+            { name: "Pants", qty: 2 },
+            { name: "Tshirts", qty: 1 },
+        ],
+        status: "In Progress",
+    },
+    {
+        id: "ORD1000",
+        user: "User 1",
+        date: "2025-09-01",
+        items: [
+            { name: "Shirts", qty: 2 },
+            { name: "Pants", qty: 1 },
+            { name: "Tshirts", qty: 3 },
+        ],
+        status: "Pending",
+    },
+   
+    {
+        id: "ORD1002",
+        user: "User 3",
+        date: "2025-09-03",
+        items: [
+            { name: "Shirts", qty: 1 },
+            { name: "Pants", qty: 2 },
+            { name: "Tshirts", qty: 2 },
+        ],
+        status: "Completed",
+    },
+    {
+        id: "ORD1003",
+        user: "User 4",
+        date: "2025-09-04",
+        items: [
+            { name: "Shirts", qty: 3 },
+            { name: "Pants", qty: 1 },
+            { name: "Tshirts", qty: 2 },
+        ],
+        status: "Pending",
+    },
+    {
+        id: "ORD1004",
+        user: "User 5",
+        date: "2025-09-05",
+        items: [
+            { name: "Shirts", qty: 2 },
+            { name: "Pants", qty: 3 },
+            { name: "Tshirts", qty: 1 },
+        ],
+        status: "In Progress",
+    },
+    {
+        id: "ORD1005",
+        user: "User 1",
+        date: "2025-09-06",
+        items: [
+            { name: "Shirts", qty: 5 },
+            { name: "Pants", qty: 2 },
+            { name: "Tshirts", qty: 2 },
+        ],
+        status: "Completed",
+    },
+    {
+        id: "ORD1006",
+        user: "User 2",
+        date: "2025-09-07",
+        items: [
+            { name: "Shirts", qty: 1 },
+            { name: "Pants", qty: 1 },
+            { name: "Tshirts", qty: 3 },
+        ],
+        status: "Pending",
+    },
+    {
+        id: "ORD1007",
+        user: "User 3",
+        date: "2025-09-08",
+        items: [
+            { name: "Shirts", qty: 3 },
+            { name: "Pants", qty: 2 },
+            { name: "Tshirts", qty: 1 },
+        ],
+        status: "In Progress",
+    },
+    {
+        id: "ORD1008",
+        user: "User 4",
+        date: "2025-09-09",
+        items: [
+            { name: "Shirts", qty: 2 },
+            { name: "Pants", qty: 2 },
+            { name: "Tshirts", qty: 2 },
+        ],
+        status: "Completed",
+    },
+    {
+        id: "ORD1009",
+        user: "User 5",
+        date: "2025-09-10",
+        items: [
+            { name: "Shirts", qty: 4 },
+            { name: "Pants", qty: 1 },
+            { name: "Tshirts", qty: 3 },
+        ],
+        status: "Pending",
+    },
+];
+
 
 const statusMap: any = {
     Pending: { color: "warning", icon: <HourglassBottom /> },

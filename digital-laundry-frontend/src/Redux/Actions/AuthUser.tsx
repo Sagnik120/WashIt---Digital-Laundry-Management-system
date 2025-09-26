@@ -60,3 +60,23 @@ export const staffSingup: any = createAsyncThunk(
       .catch((err) => { return err });
   }
 );
+export const staffRegisterAction: any = createAsyncThunk(
+  "login",
+  async (body: any) => {
+    return await ApiPostNoAuth(BaseUrl, api.staffRegister, body)
+      .then(async (res: any) => {
+        return res?.data;
+      })
+      .catch((err) => { return err });
+  }
+);
+export const studentLoginAction: any = createAsyncThunk(
+  "login",
+  async (body: any) => {
+    return await ApiPostNoAuth(BaseUrl, api.studentLogin, body)
+      .then(async (res: any) => {
+        return res?.data;
+      })
+      .catch((err) => { return err });
+  }
+);

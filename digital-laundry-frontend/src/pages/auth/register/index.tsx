@@ -18,7 +18,7 @@ import LocalLaundryServiceIcon from "@mui/icons-material/LocalLaundryService";
 import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import { useDispatch } from "react-redux";
-import { staffSingup, studentSignup } from "@/Redux/Actions/AuthUser";
+import { staffRegisterAction, staffSingup, studentSignup } from "@/Redux/Actions/AuthUser";
 import ErrorHandler from "@/lib/errorHandler";
 
 const DarkPaper = (props: any) => (
@@ -265,24 +265,14 @@ const Register = () => {
             body.staffCode = data?.staffCode;
         }
 
-        dispatch(role === 'student' ? studentSignup(body) : staffSingup(body))
+        dispatch(role === 'student' ? studentSignup(body) : staffRegisterAction(body))
             .then((res: any) => {
                 const error = ErrorHandler(res, setSnackBar);
-                console.log(res, 'res')
+                console.log(res, 'res signup')
                 if (error) {
-                    // const userData = res.payload.data.user;
-                    // const safeUserData = {
-                    //   _id: userData?._id,
-                    //   userName: userData?.userName,
-                    //   fullName: userData?.fullName,
-                    //   email: userData?.email,
-                    //   role: userData?.role,
-                    //   profileImage: userData?.profileImage,
-                    // };
-                    // cookieUtils.setCookie('userData', safeUserData, 1);
-                    // cookieUtils.setCookie('token', res?.payload?.data?.token, 1);
+                    //  localStorage.setItem("uer")
                     setSnackBar('success', res.payload.message);
-                    // router.push('/users');
+                    router.push('/auth/login');
                 }
             })
             .catch((err: any) => {
