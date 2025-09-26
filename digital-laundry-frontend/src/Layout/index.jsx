@@ -17,6 +17,7 @@ const Layout = ({ children }) => {
     "/user/userHistory",
     "/user/userAddEntry",
     "/staff/staffScanEntry",
+    "/staff/staffOrder",
   ];
   const publicRoutes = [
     "/auth/login",

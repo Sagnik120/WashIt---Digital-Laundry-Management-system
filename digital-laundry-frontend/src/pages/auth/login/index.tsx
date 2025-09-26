@@ -15,6 +15,8 @@ import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import LocalLaundryServiceIcon from "@mui/icons-material/LocalLaundryService";
 import AuthWrapper from "../../../Components/AuthLayout/AuthLayout";
+import { loginFunction } from "../../../Redux/Actions/AuthUser";
+import ErrorHandler from "../../../lib/errorHandler";
 
 const Login = () => {
   // ================ Hooks ================
@@ -88,15 +90,54 @@ const Login = () => {
     return isValid;
   };
 
-  const handleLogin = () => {
-    if (validate()) {
-      // Proceed with login
-      setSnackBar("success", "Login successful!");
-      console.log("Login data:", data);
-      // Add your login API call here
-    } else {
-      setSnackBar("error", "Please fix the errors before submitting");
-    }
+  // const handleSubmit = () => {
+  //   if (validate()) {
+  //     // Proceed with login
+  //     setSnackBar("success", "Login successful!");
+  //     console.log("Login data:", data);
+  //     // Add your login API call here
+  //   } else {
+  //     setSnackBar("error", "Please fix the errors before submitting");
+  //   }
+  // };
+
+  const handleSubmit = async () => {
+    const isFormValid = await validate();
+    if (!isFormValid) return;
+
+    setFullPageLoader(true);
+    const body = {
+      email: data?.email,
+      password: data?.password,
+    };
+
+    dispatch(loginFunction(body))
+      .then((res: any) => {
+        const error = ErrorHandler(res, setSnackBar);
+        console.log(res, 'res')
+        if (error) {
+          // const userData = res.payload.data.user;
+          // const safeUserData = {
+          //   _id: userData?._id,
+          //   userName: userData?.userName,
+          //   fullName: userData?.fullName,
+          //   email: userData?.email,
+          //   role: userData?.role,
+          //   profileImage: userData?.profileImage,
+          // };
+          // cookieUtils.setCookie('userData', safeUserData, 1);
+          // cookieUtils.setCookie('token', res?.payload?.data?.token, 1);
+          setSnackBar('success', res.payload.message);
+          router.push('/users');
+        }
+      })
+      .catch((err: any) => {
+        console.log(err, 'error')
+        setSnackBar('error', 'Please provide correct details.');
+      })
+      .finally(() => {
+        setFullPageLoader(false);
+      });
   };
 
   return (
@@ -325,7 +366,7 @@ const Login = () => {
                     : "linear-gradient(135deg, #dc2626, #f97316)", // admin theme
               "&:hover": { opacity: 0.9 },
             }}
-            onClick={() => handleLogin()}
+            onClick={() => handleSubmit()}
           >
             {role === "student"
               ? "Login as Student"

@@ -132,6 +132,7 @@ export default function PrivateLayout({ children }: any) {
     { name: "History", icon: <HistoryIcon />, link: "/user/userHistory", isShow: true },
     { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/user/userAddEntry", isShow: true },
     { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffScanEntry", isShow: true },
+    { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffOrder", isShow: true },
     // { name: "Compliant", icon: <GavelIcon />, link: "/categories", isShow: true },
   ];
 

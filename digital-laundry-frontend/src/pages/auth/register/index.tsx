@@ -18,6 +18,8 @@ import LocalLaundryServiceIcon from "@mui/icons-material/LocalLaundryService";
 import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import { useDispatch } from "react-redux";
+import { staffSingup, studentSignup } from "@/Redux/Actions/AuthUser";
+import ErrorHandler from "@/lib/errorHandler";
 
 const DarkPaper = (props: any) => (
     <Paper
@@ -96,7 +98,6 @@ const Register = () => {
 
     const handleChangeInput = (e: any, name1?: any, newValue?: any) => {
         const { name, value } = e.target;
-        console.log(name, 'name')
         if (newValue) {
             setData({ ...data, [name1]: newValue });
         } else {
@@ -245,15 +246,52 @@ const Register = () => {
         return isValid;
     };
 
-    const handleSubmit = () => {
-        if (validate()) {
-            // Proceed with login
-            setSnackBar("success", "Registered successfully!");
-            console.log("Login data:", data);
-            // Add your login API call here
+    const handleSubmit = async () => {
+        const isFormValid = await validate();
+        if (!isFormValid) return;
+        setFullPageLoader(true);
+        const body: any = {
+            "fullName": data?.name,
+            "email": data?.email,
+            "password": data?.password,
+            "confirmPassword": data?.confirmPassword,
+        };
+
+        if (role === "student") {
+            body.hostelName = data?.hostel;
+            body.roomNumber = data?.roomNo;
+            body.rollNumber = data?.rollNo;
         } else {
-            setSnackBar("error", "Please fix the errors before submitting");
+            body.staffCode = data?.staffCode;
         }
+
+        dispatch(role === 'student' ? studentSignup(body) : staffSingup(body))
+            .then((res: any) => {
+                const error = ErrorHandler(res, setSnackBar);
+                console.log(res, 'res')
+                if (error) {
+                    // const userData = res.payload.data.user;
+                    // const safeUserData = {
+                    //   _id: userData?._id,
+                    //   userName: userData?.userName,
+                    //   fullName: userData?.fullName,
+                    //   email: userData?.email,
+                    //   role: userData?.role,
+                    //   profileImage: userData?.profileImage,
+                    // };
+                    // cookieUtils.setCookie('userData', safeUserData, 1);
+                    // cookieUtils.setCookie('token', res?.payload?.data?.token, 1);
+                    setSnackBar('success', res.payload.message);
+                    // router.push('/users');
+                }
+            })
+            .catch((err: any) => {
+                console.log(err, 'error')
+                setSnackBar('error', 'Please provide correct details.');
+            })
+            .finally(() => {
+                setFullPageLoader(false);
+            });
     };
 
     useEffect(() => {
@@ -520,11 +558,11 @@ const Register = () => {
                         <Grid item xs={12} md={6}>
                             <Autocomplete
                                 options={[
-                                    "Hostel A",
-                                    "Hostel B",
-                                    "Hostel C",
-                                    "Hostel D",
-                                    "Hostel E",
+                                    "G1",
+                                    "G2",
+                                    "G3",
+                                    "G4",
+                                    "G5",
                                 ]}
                                 // value={hostel} // state variable
                                 PaperComponent={DarkPaper}
