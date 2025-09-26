@@ -107,7 +107,7 @@ WashIt is a comprehensive digital solution designed to replace IIT Jodhpur's tra
 
 
 # Clone the repository
-git clone https://github.com/your-username/washit-laundry-system.git
+git clone https://github.com//Sagnik120/WashIt---Digital-Laundry-Management-system.git
 cd washit-laundry-system
 
 # Install dependencies
@@ -133,7 +133,7 @@ npm install
 # Start development server
 npm run dev
 
-👥 Team
+## 👥 Team
 WashIt Development Team
 Computer Science Department
 Backend Development: [Sagnik Chandra]
