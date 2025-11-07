@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import dynamic from "next/dynamic";
 import { Box, Typography, Button, Stack } from "@mui/material";
 import { UploadFile } from "@mui/icons-material";
+import { useRouter } from "next/router";
 
 // Dynamic import for react-qr-reader (client-side only)
 const QrReader = dynamic(
@@ -11,6 +12,7 @@ const QrReader = dynamic(
 );
 
 export default function StaffScanEntry() {
+    const router = useRouter();
     const [scanData, setScanData] = useState<string | null>(null);
     const [imageScanData, setImageScanData] = useState<string | null>(null);
 
@@ -41,6 +43,7 @@ export default function StaffScanEntry() {
             };
         };
         reader.readAsDataURL(file);
+        router.push("/staff/staffOrder")
     };
 
     return (
@@ -49,11 +52,11 @@ export default function StaffScanEntry() {
                 px: { xs: 2, md: 4 },
                 py: 4,
                 minHeight: "90vh",
-                background: "linear-gradient(180deg, #f0f4f8 0%, #e0f2fe 100%)",
+                background: "linear-gradient(135deg, #e0f2fe, #f0fdfa)",
             }}
         >
             <Typography variant="h4" fontWeight="bold" gutterBottom color="primary">
-                🧾 Staff QR Scan
+                🧾 QR Scan Entry
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={4}>
                 Scan QR codes from user-generated laundry entries using your camera or upload an image.
@@ -84,7 +87,10 @@ export default function StaffScanEntry() {
                         <QrReader
                             constraints={{ facingMode: "environment" }}
                             onResult={(result, error) => {
-                                if (result) setScanData(result.getText());
+                                if (result) {
+                                    setScanData(result.getText());
+                                    router.push("/staff/staffOrder")
+                                };
                                 if (error) console.error(error);
                             }}
                         />

@@ -18,6 +18,7 @@ import AuthWrapper from "../../../Components/AuthLayout/AuthLayout";
 import { loginFunction, studentLoginAction } from "../../../Redux/Actions/AuthUser";
 import ErrorHandler from "../../../lib/errorHandler";
 
+
 const Login = () => {
   // ================ Hooks ================
   const dispatch = useDispatch();
@@ -102,8 +103,7 @@ const Login = () => {
   // };
 
   const handleSubmit = async () => {
-    console.log
-    ("function called sumbit")
+
     const isFormValid = await validate();
     if (!isFormValid) return;
 
@@ -116,26 +116,26 @@ const Login = () => {
     dispatch(loginFunction(body))
       .then((res: any) => {
         const error = ErrorHandler(res, setSnackBar);
-        console.log(res, 'res')
         if (error) {
-          // const userData = res.payload.data.user;
-          // const safeUserData = {
-          //   _id: userData?._id,
-          //   userName: userData?.userName,
-          //   fullName: userData?.fullName,
-          //   email: userData?.email,
-          //   role: userData?.role,
-          //   profileImage: userData?.profileImage,
-          // };
+          const userData = res.payload.user;
+          const safeUserData: any = {
+            _id: userData?._id,
+            userName: userData?.userName,
+            fullName: userData?.fullName,
+            email: userData?.email,
+            role: userData?.role,
+            profileImage: userData?.profileImage,
+            password: data?.password
+          };
           // cookieUtils.setCookie('userData', safeUserData, 1);
-          // cookieUtils.setCookie('token', res?.payload?.data?.token, 1);
+          localStorage.setItem('token', res?.payload?.accessToken);
           localStorage.setItem("role", res.payload.user.role)
+          localStorage.setItem("userData", JSON.stringify(safeUserData))
           setSnackBar('success', res.payload.message);
           router.push('/user/userProfile');
         }
       })
       .catch((err: any) => {
-        console.log(err, 'error')
         setSnackBar('error', 'Please provide correct details.');
       })
       .finally(() => {
@@ -144,23 +144,21 @@ const Login = () => {
   };
 
   function handleStaffLogin() {
-    console.log("staff login")
     const payload = {
       email: data?.email,
       password: data?.password,
     };
 
     dispatch(studentLoginAction(payload))
-      .then((res : any) => {
+      .then((res: any) => {
         const ok = ErrorHandler(res, setSnackBar);
-        console.log("res:", res);
         if (ok) {
           setSnackBar("success", "Login successfully");
-          localStorage.setItem("role" , res.payload.user.role)
-          router.push("/staff/staffOrder")
+          localStorage.setItem("role", res.payload.user.role)
+          router.push("/staff/staffScanEntry")
         }
       })
-      .catch((err : any) => {
+      .catch((err: any) => {
         setSnackBar("error", err.message);
       })
       .finally(() => {
@@ -395,7 +393,7 @@ const Login = () => {
                     : "linear-gradient(135deg, #dc2626, #f97316)", // admin theme
               "&:hover": { opacity: 0.9 },
             }}
-            onClick={role === 'student' ? () => handleSubmit() : role === 'staff' ?()=> handleStaffLogin() : ()=>handleSubmit()}
+            onClick={role === 'student' ? () => handleSubmit() : role === 'staff' ? () => handleStaffLogin() : () => handleSubmit()}
           >
             {role === "student"
               ? "Login as Student"

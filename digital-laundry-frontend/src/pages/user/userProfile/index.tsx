@@ -39,33 +39,57 @@ import {
     Tooltip as ReTooltip,
 } from "recharts";
 import CountUp from "react-countup";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import EditIcon from "@mui/icons-material/Edit";
+import { useRouter } from "next/navigation";
+import usePageLoader from "@/Redux/hooks/usePageLoader";
+import useSnackBar from "@/Redux/hooks/useSnackBar";
+import { studentProfile } from "@/Redux/Actions/AuthUser";
+import ErrorHandler from "@/lib/errorHandler";
+import { useDispatch } from "react-redux";
 
 export default function StudentDashboard() {
+    const dispatch = useDispatch();
+    const router = useRouter();
+    const setFullPageLoader = usePageLoader();
+    const { setSnackBar } = useSnackBar();
+
     const stats = [
         { name: "Pending", value: 2, color: "#f59e0b", icon: <HourglassBottom /> },
-        {
-            name: "In Progress",
-            value: 1,
-            color: "#3b82f6",
-            icon: <LocalLaundryService />,
-        },
+        { name: "In Progress", value: 1, color: "#3b82f6", icon: <LocalLaundryService /> },
         { name: "Completed", value: 5, color: "#10b981", icon: <CheckCircle /> },
     ];
-    const [openEdit, setOpenEdit] = useState(false);
 
-    // Mock profile data
+    // ✅ Complaint counts (Open / In Review / Resolved)
+    const complaintStats = [
+        { name: "Open", value: 3, color: "#f59e0b" },
+        { name: "In Review", value: 1, color: "#3b82f6" },
+        { name: "Resolved", value: 7, color: "#10b981" },
+    ];
+
+    const [openEdit, setOpenEdit] = useState(false);
+    const [userData, setUserData] = useState<any>({
+        full_name: "Shreeval Paladiya",
+        roll_number: "M25CSE021",
+        email: "shreevalpaladiya@gmail.com",
+        hostel_name: "G5",
+        room_number: "227",
+        department_name: "CSE",
+        passing_year: "2027",
+        phone_number: "9313321281",
+        profile_picture: "img.jpg",
+    });
+
     const [profile, setProfile] = useState({
-        name: "Shreeval Paladiya",
-        rollNo: "21BCP123",
-        email: "shreeval@example.com",
-        hostel: "A-Block",
-        roomNo: "205",
-        department: "Computer Science",
-        year: "3rd Year",
-        phone: "+91 9876543210",
-        photo: "",
+        full_name: "Shreeval Paladiya",
+        roll_number: "M25CSE021",
+        email: "shreevalpaladiya@gmail.com",
+        hostel_name: "G5",
+        room_number: "227",
+        department_name: "CSE",
+        passing_year: "2027",
+        phone_number: "9313321281",
+        profile_picture: "img.jpg",
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,7 +101,7 @@ export default function StudentDashboard() {
         if (e.target.files && e.target.files[0]) {
             const reader = new FileReader();
             reader.onload = () => {
-                setProfile({ ...profile, photo: reader.result as string });
+                setProfile({ ...profile, profile_picture: reader.result as string });
             };
             reader.readAsDataURL(e.target.files[0]);
         }
@@ -87,6 +111,35 @@ export default function StudentDashboard() {
     const hours = new Date().getHours();
     const greeting =
         hours < 12 ? "Good Morning" : hours < 18 ? "Good Afternoon" : "Good Evening";
+
+    const studentProfileData = () => {
+        console.log("Fun called")
+        setFullPageLoader(true);
+        const payload: any = {
+            email: userData?.email,
+            password: userData?.password,
+        };
+        dispatch(studentProfile(payload))
+            .then((res: any) => {
+                const error = ErrorHandler(res, setSnackBar);
+                if (error) {
+                    console.log(res.payload.data, 'res')
+                    setProfile(res.payload.data)
+                }
+            })
+            .catch((err: any) => {
+                setSnackBar('error', err.message);
+            })
+            .finally(() => {
+                setFullPageLoader(false);
+            });
+    };
+
+    // useEffect(() => {
+    //     let user: any = localStorage.getItem("userData")
+    //     setUserData(JSON.parse(user))
+    //     studentProfileData();
+    // }, [])
 
     return (
         <>
@@ -101,7 +154,7 @@ export default function StudentDashboard() {
                 }}
             >
                 <Typography variant="h4" fontWeight="bold" gutterBottom color="primary" mb={3}>
-                    {greeting}, {profile.name.split(" ")[0]} 👋
+                    {greeting}, {profile.full_name.split(" ")[0]} 👋
                 </Typography>
 
                 <Grid container spacing={4}>
@@ -120,7 +173,7 @@ export default function StudentDashboard() {
                             {/* Profile Header */}
                             <Box display="flex" alignItems="center" gap={3}>
                                 <Avatar
-                                    src={profile.photo || ""}
+                                    src={profile.profile_picture || ""}
                                     sx={{
                                         width: 100,
                                         height: 100,
@@ -130,15 +183,15 @@ export default function StudentDashboard() {
                                         boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
                                     }}
                                 >
-                                    {profile.name.charAt(0)}
+                                    {profile.full_name.charAt(0)}
                                 </Avatar>
 
                                 <Box>
                                     <Typography variant="h5" fontWeight="bold">
-                                        {profile.name}
+                                        {profile.full_name}
                                     </Typography>
                                     <Typography variant="subtitle1" color="text.secondary">
-                                        {profile.department} • {profile.year}
+                                        {profile.department_name} • {profile.passing_year}
                                     </Typography>
                                 </Box>
                             </Box>
@@ -150,12 +203,12 @@ export default function StudentDashboard() {
                                 <Grid container spacing={2}>
                                     {[
                                         { title: "Email", value: profile.email, full: true }, // ✅ full width
-                                        { title: "Roll Number", value: profile.rollNo, full: false },
-                                        { title: "Hostel", value: profile.hostel, full: false },
-                                        { title: "Room No", value: profile.roomNo, full: false },
-                                        { title: "Phone", value: profile.phone, full: false },
-                                        { title: "Department", value: profile.department, full: false },
-                                        { title: "Year", value: profile.year, full: false },
+                                        { title: "Roll Number", value: profile.roll_number, full: false },
+                                        { title: "Hostel", value: profile.hostel_name, full: false },
+                                        { title: "Room No", value: profile.room_number, full: false },
+                                        { title: "Phone", value: profile.phone_number, full: false },
+                                        { title: "Department", value: profile.department_name, full: false },
+                                        { title: "Year", value: profile.passing_year, full: false },
                                     ].map((item, index) => (
                                         <Grid item xs={12} sm={item.full ? 12 : 6} key={index}>
                                             <Box
@@ -203,7 +256,7 @@ export default function StudentDashboard() {
                             {/* 🔥 Modern Edit Button at Bottom */}
                             <Box mt={2}>
                                 <Button
-                                    fullWidth // ✅ makes button full width
+                                    fullWidth
                                     variant="contained"
                                     startIcon={<EditIcon />}
                                     onClick={() => setOpenEdit(true)}
@@ -216,8 +269,8 @@ export default function StudentDashboard() {
                                         boxShadow: "0 4px 12px rgba(37,99,235,0.4)",
                                         transition: "all 0.3s ease",
                                         "&:hover": {
-                                            background: "linear-gradient(135deg,#1e40af,#1e3a8a)", // darker hover
-                                            transform: "translateY(-2px)", // subtle lift
+                                            background: "linear-gradient(135deg,#1e40af,#1e3a8a)",
+                                            transform: "translateY(-2px)",
                                             boxShadow: "0 6px 16px rgba(30,58,138,0.6)",
                                         },
                                     }}
@@ -225,15 +278,15 @@ export default function StudentDashboard() {
                                     Edit Profile
                                 </Button>
                             </Box>
-
-
                         </Card>
                     </Grid>
 
                     {/* Dashboard Content */}
                     <Grid item xs={12} md={8}>
-
                         {/* Summary Cards */}
+                        <Typography variant="h6" fontWeight={700} mb={2}>
+                            Complaint Status
+                        </Typography>
                         <Grid container spacing={3}>
                             {stats.map((stat, index) => (
                                 <Grid item xs={12} sm={4} key={index}>
@@ -298,10 +351,7 @@ export default function StudentDashboard() {
                                         {/* Status Name */}
                                         <Typography
                                             variant="h6"
-                                            sx={{
-                                                letterSpacing: 0.5,
-                                                color: "#374151",
-                                            }}
+                                            sx={{ letterSpacing: 0.5, color: "#374151" }}
                                         >
                                             {stat.name}
                                         </Typography>
@@ -310,9 +360,48 @@ export default function StudentDashboard() {
                             ))}
                         </Grid>
 
+                        {/* Complaint Counts (below Summary Cards) */}
+                        <Box mt={4}>
+                            <Typography variant="h6" fontWeight={700} mb={2}>
+                                Complaint Status
+                            </Typography>
+                            <Grid container spacing={3}>
+                                {complaintStats.map((stat, index) => (
+                                    <Grid item xs={12} sm={4} key={`cmp-${index}`}>
+                                        <Card
+                                            sx={{
+                                                borderRadius: 5,
+                                                textAlign: "center",
+                                                p: 4,
+                                                background: `linear-gradient(145deg, ${stat.color}22, #ffffff)`,
+                                                border: `1px solid ${stat.color}33`,
+                                                boxShadow: "8px 8px 20px rgba(0,0,0,0.1), -8px -8px 20px #fff",
+                                                transition: "0.35s",
+                                                position: "relative",
+                                                overflow: "hidden",
+                                                "&:hover": {
+                                                    transform: "translateY(-8px) scale(1.04)",
+                                                    boxShadow: `0 10px 30px ${stat.color}55`,
+                                                },
+                                            }}
+                                        >
+                                            <Typography
+                                                variant="h3"
+                                                fontWeight="bold"
+                                                sx={{ mb: 1, color: stat.color }}
+                                            >
+                                                <CountUp start={0} end={stat.value} duration={1.2} />
+                                            </Typography>
+                                            <Typography variant="h6" sx={{ letterSpacing: 0.5, color: "#374151" }}>
+                                                {stat.name}
+                                            </Typography>
+                                        </Card>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </Box>
 
-
-                        {/* Pie Chart */}
+                        {/* ✅ Both Pie Charts inside ONE container */}
                         <Card
                             sx={{
                                 borderRadius: 5,
@@ -323,34 +412,90 @@ export default function StudentDashboard() {
                             }}
                         >
                             <Typography variant="h6" textAlign="center" gutterBottom>
-                                Order Status Overview
+                                Status Overviews
                             </Typography>
-                            <ResponsiveContainer width="100%" height={280}>
-                                <PieChart>
-                                    <Pie
-                                        data={stats}
-                                        dataKey="value"
-                                        nameKey="name"
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={100}
-                                        label={({ name, value }) => `${name}: ${value}`}
+
+                            <Grid container spacing={3}>
+                                {/* Left Pie: Order Status Overview */}
+                                <Grid item xs={12} md={6}>
+                                    <Card
+                                        variant="outlined"
+                                        sx={{ borderRadius: 4, p: 2, background: "linear-gradient(180deg,#ffffff,#fbfdff)" }}
                                     >
-                                        {stats.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Pie>
-                                    <ReTooltip
-                                        contentStyle={{
-                                            backgroundColor: "white",
-                                            border: "1px solid #e5e7eb",
-                                            borderRadius: "8px",
-                                            padding: "8px 12px",
-                                            boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-                                        }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
+                                        <Typography variant="subtitle1" textAlign="center" mb={1.5}>
+                                            Order Status Overview
+                                        </Typography>
+                                        <Box sx={{ width: "100%", height: 280 }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={stats}
+                                                        dataKey="value"
+                                                        nameKey="name"
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        outerRadius={100}
+                                                        label={({ name, value }) => `${name}: ${value}`}
+                                                    >
+                                                        {stats.map((entry, index) => (
+                                                            <Cell key={`o-cell-${index}`} fill={entry.color} />
+                                                        ))}
+                                                    </Pie>
+                                                    <ReTooltip
+                                                        contentStyle={{
+                                                            backgroundColor: "white",
+                                                            border: "1px solid #e5e7eb",
+                                                            borderRadius: "8px",
+                                                            padding: "8px 12px",
+                                                            boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+                                                        }}
+                                                    />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </Box>
+                                    </Card>
+                                </Grid>
+
+                                {/* Right Pie: Complaint Status Overview */}
+                                <Grid item xs={12} md={6}>
+                                    <Card
+                                        variant="outlined"
+                                        sx={{ borderRadius: 4, p: 2, background: "linear-gradient(180deg,#ffffff,#fbfdff)" }}
+                                    >
+                                        <Typography variant="subtitle1" textAlign="center" mb={1.5}>
+                                            Complaint Status Overview
+                                        </Typography>
+                                        <Box sx={{ width: "100%", height: 280 }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={complaintStats}
+                                                        dataKey="value"
+                                                        nameKey="name"
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        outerRadius={100}
+                                                        label={({ name, value }) => `${name}: ${value}`}
+                                                    >
+                                                        {complaintStats.map((entry, index) => (
+                                                            <Cell key={`c-cell-${index}`} fill={entry.color} />
+                                                        ))}
+                                                    </Pie>
+                                                    <ReTooltip
+                                                        contentStyle={{
+                                                            backgroundColor: "white",
+                                                            border: "1px solid #e5e7eb",
+                                                            borderRadius: "8px",
+                                                            padding: "8px 12px",
+                                                            boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+                                                        }}
+                                                    />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </Box>
+                                    </Card>
+                                </Grid>
+                            </Grid>
                         </Card>
                     </Grid>
                 </Grid>
@@ -362,10 +507,10 @@ export default function StudentDashboard() {
                 <DialogContent dividers>
                     <Box display="flex" justifyContent="center" mb={2}>
                         <Avatar
-                            src={profile.photo || ""}
+                            src={profile.profile_picture || ""}
                             sx={{ width: 100, height: 100, bgcolor: "#3b82f6", fontSize: 32 }}
                         >
-                            {profile.name.charAt(0)}
+                            {profile.full_name.charAt(0)}
                         </Avatar>
                         <input
                             accept="image/*"
@@ -384,8 +529,8 @@ export default function StudentDashboard() {
                                     bgcolor: "white",
                                     boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
                                     "&:hover": {
-                                        bgcolor: "white", // keep same background on hover
-                                        boxShadow: "0 4px 12px rgba(0,0,0,0.3)", // only shadow change
+                                        bgcolor: "white",
+                                        boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
                                     },
                                 }}
                             >

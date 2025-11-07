@@ -121,7 +121,6 @@ const ChangePassword = () => {
         if (validate()) {
             // Proceed with login
             setSnackBar("success", "Password changed successfully!");
-            console.log("Login data:", data);
             // Add your login API call here
         } else {
             setSnackBar("error", "Please fix the errors before submitting");

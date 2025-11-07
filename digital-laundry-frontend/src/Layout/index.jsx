@@ -16,8 +16,13 @@ const Layout = ({ children }) => {
     "/user/userProfile",
     "/user/userHistory",
     "/user/userAddEntry",
+    "/user/userComplaint",
     "/staff/staffScanEntry",
     "/staff/staffOrder",
+    "/staff/staffComplaint",
+    "/admin/configuration",
+    "/admin/allOrdersEntry",
+    "/admin/allComplaint",
   ];
   const publicRoutes = [
     "/auth/login",

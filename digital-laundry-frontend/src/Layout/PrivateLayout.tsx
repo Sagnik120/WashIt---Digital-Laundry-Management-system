@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+"use client";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import Image from "next/image";
 import { styled, useTheme } from "@mui/material/styles";
 import {
   Box,
@@ -18,6 +18,13 @@ import {
   Toolbar,
   Avatar,
   Typography,
+  Badge,
+  Popover,
+  Tabs,
+  Tab,
+  Chip,
+  Stack,
+  Button,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -25,10 +32,17 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import MuiAppBar from "@mui/material/AppBar";
 import LogoutIcon from "@mui/icons-material/Logout";
 import PersonIcon from "@mui/icons-material/Person";
+import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import HistoryIcon from "@mui/icons-material/History";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
-import GavelIcon from "@mui/icons-material/Gavel";
 import { Notifications } from "@mui/icons-material";
+import LocalLaundryServiceIcon from "@mui/icons-material/LocalLaundryService";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import HourglassBottomIcon from "@mui/icons-material/HourglassBottom";
+import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
+import ListAltIcon from "@mui/icons-material/ListAlt";
+import FeedbackIcon from "@mui/icons-material/Feedback";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 
 const drawerWidth = 300;
 
@@ -122,30 +136,33 @@ const Drawer = styled(MuiDrawer, {
 export default function PrivateLayout({ children }: any) {
   const theme = useTheme();
   const [open, setOpen] = useState<any>(false);
-  const [role , setRole] = useState("")
-
+  const [role, setRole] = useState<string>("student");
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const router = useRouter();
   const pathname = usePathname();
 
   const menuData = [
-    { name: "Profile", icon: <PersonIcon />, link: "/user/userProfile", isShow: role === 'student' ? true : false },
-    { name: "History", icon: <HistoryIcon />, link: "/user/userHistory", isShow: role === 'student' ? true : false },
-    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/user/userAddEntry", isShow: role === 'student' ? true : false },
-    { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffScanEntry", isShow: role === 'staff' ? true : false },
-    { name: "Scan Entry", icon: <AddCircleOutlineIcon />, link: "/staff/staffOrder", isShow: role === 'staff' ? true : false },
-    // { name: "Compliant", icon: <GavelIcon />, link: "/categories", isShow: true },
+    { name: "Profile", icon: <PersonIcon />, link: "/user/userProfile", isShow: role === "student" },
+    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/user/userAddEntry", isShow: role === "student" },
+    { name: "History", icon: <HistoryIcon />, link: "/user/userHistory", isShow: role === "student" },
+    { name: "Complaints", icon: <ReportProblemIcon />, link: "/user/userComplaint", isShow: role === "student" },
+    { name: "Scan Entry", icon: <QrCodeScannerIcon />, link: "/staff/staffScanEntry", isShow: role === "staff" },
+    { name: "Manage Orders", icon: <ListAltIcon />, link: "/staff/staffOrder", isShow: role === "staff" },
+    { name: "Manage Complaints", icon: <FeedbackIcon />, link: "/staff/staffComplaint", isShow: role === "staff"},
+    { name: "Admin Setup", icon: <AdminPanelSettingsIcon />, link: "/admin/configuration", isShow: role === "admin" },
+    { name: "Order Lookup", icon: <ListAltIcon />, link: "/admin/allOrdersEntry", isShow: role === "admin" },
+    { name: "All Complaints", icon: <ReportProblemIcon />, link: "/admin/allComplaint", isShow: role === "admin" }
   ];
 
-  useEffect(()=>{
-    let role :any = localStorage.getItem("role")
-    setRole(role)
-  },[])
+  // useEffect(() => {
+  //   const r = localStorage.getItem("role") || "";
+  //   setRole(r);
+  // }, []);
 
   // Light sidebar colors
-  const drawerColor = "#f3f4f6"; // Light gray background
-  const textColor = "#1f2937"; // Dark text/icons
-  const activeItemColor = "#3b82f6"; // Blue for active item
+  const drawerColor = "#f3f4f6";
+  const textColor = "#1f2937";
+  const activeItemColor = "#3b82f6";
 
   const handleDrawerOpen = () => setOpen(true);
   const handleDrawerClose = () => setOpen(false);
@@ -155,8 +172,51 @@ export default function PrivateLayout({ children }: any) {
     if (isMobile) setOpen(false);
   };
 
-  // Get active menu item based on pathname
   const activeMenuItem = menuData.find((item) => pathname.startsWith(item.link));
+
+  // ----------------- Notifications popover state -----------------
+  const [notiAnchor, setNotiAnchor] = useState<HTMLElement | null>(null);
+  const notiOpen = Boolean(notiAnchor);
+  const openNoti = (e: React.MouseEvent<HTMLElement>) => setNotiAnchor(e.currentTarget);
+  const closeNoti = () => setNotiAnchor(null);
+  const [tab, setTab] = useState(0);
+
+  // ----------------- Mock data (swap with API) -----------------
+  // Student sees pending & resolved orders
+  const studentPending = [
+    { id: "LDR-2025-0042", date: "2025-11-02", items: 4, status: "Pending" },
+    { id: "LDR-2025-0045", date: "2025-11-04", items: 2, status: "Pending" },
+  ];
+  const studentResolved = [
+    { id: "LDR-2025-0031", date: "2025-10-29", items: 5, status: "Completed" },
+  ];
+
+  // Staff sees open complaints
+  const staffOpenComplaints = [
+    { id: "CMP-24017", title: "Washed shirt shrank", order: "LDR-2025-0040", time: "Today 10:15", status: "Open" },
+    { id: "CMP-24018", title: "Missing socks", order: "LDR-2025-0041", time: "Today 09:05", status: "Open" },
+  ];
+
+  const badgeCount = useMemo(() => {
+    if (role === "staff") return staffOpenComplaints.length;
+    // student
+    return studentPending.length + studentResolved.length;
+  }, [role]);
+
+  // Chip styles
+  const chipFor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "pending":
+        return { label: "Pending", sx: { bgcolor: "#f59e0b22", color: "#b45309", fontWeight: 700 } };
+      case "completed":
+      case "resolved":
+        return { label: "Resolved", sx: { bgcolor: "#10b98122", color: "#065f46", fontWeight: 700 } };
+      case "open":
+        return { label: "Open", sx: { bgcolor: "#f59e0b22", color: "#b45309", fontWeight: 700 } };
+      default:
+        return { label: status, sx: { bgcolor: "#e5e7eb", color: "#374151", fontWeight: 700 } };
+    }
+  };
 
   // Drawer content
   const drawer = (
@@ -188,8 +248,8 @@ export default function PrivateLayout({ children }: any) {
                       : "transparent",
                     "&:hover": {
                       background: isActive
-                        ? "linear-gradient(135deg, #06b6d4, #3b82f6)" // ✅ keep same for active
-                        : "rgba(6, 182, 212, 0.1)", // ✅ only hover for non-active
+                        ? "linear-gradient(135deg, #06b6d4, #3b82f6)"
+                        : "rgba(6, 182, 212, 0.1)",
                     },
                   }}
                 >
@@ -212,7 +272,6 @@ export default function PrivateLayout({ children }: any) {
                     }}
                   />
                 </ListItemButton>
-
               </Tooltip>
             </ListItem>
           );
@@ -246,7 +305,7 @@ export default function PrivateLayout({ children }: any) {
                 <MenuIcon />
               </IconButton>
 
-              {/* ✅ Dynamic Title with Icon */}
+              {/* Title + Icon */}
               <Box display="flex" alignItems="center" gap={1}>
                 {activeMenuItem?.icon}
                 <Typography variant="h6" fontWeight="bold">
@@ -257,17 +316,23 @@ export default function PrivateLayout({ children }: any) {
 
             {/* Right Section */}
             <Box display="flex" alignItems="center" gap={2}>
-              <Typography variant="body1">{'Sagnik'}</Typography>
-              <Avatar sx={{ bgcolor: "#facc15" }}>{'Shreeval'.charAt(0)}</Avatar>
+              <Typography variant="body1">{""}</Typography>
+
+              {/* Notifications with badge */}
               <Tooltip title="Notifications">
-                <IconButton color="inherit">
-                  <Notifications />
+                <IconButton color="inherit" onClick={openNoti}>
+                  <Badge badgeContent={badgeCount} color="error">
+                    <Notifications />
+                  </Badge>
                 </IconButton>
               </Tooltip>
+
+              <Avatar sx={{ bgcolor: "#facc15" }}>S</Avatar>
+
               <IconButton
                 onClick={() => {
                   localStorage.clear();
-                  router.push("/login");
+                  router.push("/auth/login");
                 }}
                 sx={{ color: "#fff" }}
               >
@@ -277,7 +342,6 @@ export default function PrivateLayout({ children }: any) {
           </Box>
         </Toolbar>
       </AppBar>
-
 
       {/* Mobile Drawer */}
       <MuiDrawer
@@ -290,7 +354,7 @@ export default function PrivateLayout({ children }: any) {
           "& .MuiDrawer-paper": {
             width: drawerWidth,
             background: drawerColor,
-            borderRight: "1px solid #374151", // ✅ dark gray border
+            borderRight: "1px solid #374151",
             boxShadow: "2px 0 6px rgba(0, 0, 0, 0.15)",
             color: textColor,
           },
@@ -309,7 +373,7 @@ export default function PrivateLayout({ children }: any) {
             background: drawerColor,
             color: textColor,
             width: open ? drawerWidth : `calc(${theme.spacing(8)} + 1px)`,
-            borderRight: "1px solid #374151", // ✅ dark gray border
+            borderRight: "1px solid #374151",
             boxShadow: "2px 0 6px rgba(0, 0, 0, 0.15)",
           },
         }}
@@ -329,6 +393,230 @@ export default function PrivateLayout({ children }: any) {
       >
         {children}
       </Box>
+
+      {/* Notifications Popover */}
+      <Popover
+        open={notiOpen}
+        anchorEl={notiAnchor}
+        onClose={closeNoti}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            width: 380,
+            maxWidth: "90vw",
+            borderRadius: 3,
+            overflow: "hidden",
+            boxShadow: "0 20px 60px rgba(2,6,23,0.25)",
+          },
+        }}
+      >
+        <Box sx={{ p: 2, background: "linear-gradient(135deg,#06b6d4,#3b82f6)", color: "#fff" }}>
+          <Typography variant="subtitle1" fontWeight={800}>
+            Notifications
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.9 }}>
+            Stay on top of your updates
+          </Typography>
+        </Box>
+
+        {/* Tabs */}
+        <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+          {role === "staff" ? (
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth">
+              <Tab label={`Open Complaints (${staffOpenComplaints.length})`} />
+            </Tabs>
+          ) : (
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth">
+              <Tab label={`Pending Orders (${studentPending.length})`} />
+              <Tab label={`Resolved Orders (${studentResolved.length})`} />
+            </Tabs>
+          )}
+        </Box>
+
+        {/* Tab Panels */}
+        <Box sx={{ maxHeight: 360, overflowY: "auto", p: 1.5 }}>
+          {/* Student: Pending */}
+          {role !== "staff" && tab === 0 && (
+            <Stack spacing={1.25}>
+              {studentPending.length === 0 && (
+                <Typography variant="body2" color="text.secondary" textAlign="center" py={3}>
+                  No pending orders.
+                </Typography>
+              )}
+              {studentPending.map((o) => {
+                const chip = chipFor("Pending");
+                return (
+                  <Box
+                    key={o.id}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2,
+                      bgcolor: "#fff",
+                      border: "1px solid #e5e7eb",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: "50%",
+                        display: "grid",
+                        placeItems: "center",
+                        bgcolor: "#f0f9ff",
+                        color: "#0284c7",
+                      }}
+                    >
+                      <HourglassBottomIcon fontSize="small" />
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2" fontWeight={700}>
+                        {o.id}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {o.date} • {o.items} item{o.items > 1 ? "s" : ""}
+                      </Typography>
+                    </Box>
+                    <Chip size="small" label={chip.label} sx={chip.sx} />
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        router.push("/user/userHistory");
+                        closeNoti();
+                      }}
+                    >
+                      View
+                    </Button>
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+
+          {/* Student: Resolved */}
+          {role !== "staff" && tab === 1 && (
+            <Stack spacing={1.25}>
+              {studentResolved.length === 0 && (
+                <Typography variant="body2" color="text.secondary" textAlign="center" py={3}>
+                  No resolved orders.
+                </Typography>
+              )}
+              {studentResolved.map((o) => {
+                const chip = chipFor("Resolved");
+                return (
+                  <Box
+                    key={o.id}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2,
+                      bgcolor: "#fff",
+                      border: "1px solid #e5e7eb",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: "50%",
+                        display: "grid",
+                        placeItems: "center",
+                        bgcolor: "#ecfdf5",
+                        color: "#16a34a",
+                      }}
+                    >
+                      <CheckCircleIcon fontSize="small" />
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2" fontWeight={700}>
+                        {o.id}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {o.date} • {o.items} item{o.items > 1 ? "s" : ""}
+                      </Typography>
+                    </Box>
+                    <Chip size="small" label={chip.label} sx={chip.sx} />
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        router.push("/user/userHistory");
+                        closeNoti();
+                      }}
+                    >
+                      View
+                    </Button>
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+
+          {/* Staff: Open Complaints */}
+          {role === "staff" && tab === 0 && (
+            <Stack spacing={1.25}>
+              {staffOpenComplaints.length === 0 && (
+                <Typography variant="body2" color="text.secondary" textAlign="center" py={3}>
+                  No open complaints.
+                </Typography>
+              )}
+              {staffOpenComplaints.map((c) => {
+                const chip = chipFor("Open");
+                return (
+                  <Box
+                    key={c.id}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2,
+                      bgcolor: "#fff",
+                      border: "1px solid #e5e7eb",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: "50%",
+                        display: "grid",
+                        placeItems: "center",
+                        bgcolor: "#fff7ed",
+                        color: "#d97706",
+                      }}
+                    >
+                      <ReportProblemIcon fontSize="small" />
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={700} noWrap>
+                        {c.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {c.id} • {c.order} 
+                      </Typography>
+                    </Box>
+                    <Chip size="small" label={chip.label} sx={chip.sx} />
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        router.push("/user/userComplaint");
+                        closeNoti();
+                      }}
+                    >
+                      View
+                    </Button>
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+        </Box>
+      </Popover>
     </Box>
   );
 }

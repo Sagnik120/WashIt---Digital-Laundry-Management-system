@@ -1,4 +1,4 @@
-export const BaseUrl = "http://172.31.71.24:5550";
+export const BaseUrl = "http://172.31.20.156:5550";
 export const AWS_URL = "";
 export const versionControl = "";
 export const ApiUrlCommon = "";
@@ -10,6 +10,10 @@ export const api = {
   staffSingup: "/auth/staff-signup",
   staffRegister: "/api/staffRegister",
   studentLogin: "/api/studentLogin",
+  studentProfile: "/api/profile",
+
+  AddStudentEntry: "/api/orders/submit",
+  StudentHistory: "/api/orders/history",
 
   // login: "user/login",
   // forgotPassword: "admin/forgotPassword",

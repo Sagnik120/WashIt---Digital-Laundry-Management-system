@@ -1,9 +1,7 @@
 // import { responseEnum } from "./enum";
 
 export default function ErrorHandler(data, setSnackBar) {
-  console.log(data, "res2");
   if (data?.payload?.data?.success === false) {
-    console.log(data, "res2");
     setSnackBar("error", data?.payload?.data?.message);
     return false;
   } else {
