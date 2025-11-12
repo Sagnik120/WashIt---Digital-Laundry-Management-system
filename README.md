@@ -114,13 +114,7 @@ npm install
 
 # Environment configuration
 cp .env.example .env
-# Edit .env with your database credentials
 
-# Database setup
-npm run db:setup
-
-# Start development server
-npm run dev
 
 # Frontend Setup
 # Navigate to frontend directory
