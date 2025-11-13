@@ -40,7 +40,7 @@ export const ApiGetNoAuth = async (type, endUrl, body) => {
 
   return new Promise((resolve, reject) => {
     apiInstance
-      .get(type + endUrl)
+      .get(type + endUrl, { params: body || {} })
       .then((responseJson) => {
         console.log("res called", responseJson);
         resolve(responseJson);

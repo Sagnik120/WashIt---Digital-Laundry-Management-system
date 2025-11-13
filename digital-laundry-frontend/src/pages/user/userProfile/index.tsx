@@ -44,9 +44,11 @@ import EditIcon from "@mui/icons-material/Edit";
 import { useRouter } from "next/navigation";
 import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
-import { studentProfile } from "@/Redux/Actions/AuthUser";
 import ErrorHandler from "@/lib/errorHandler";
 import { useDispatch } from "react-redux";
+import { BaseUrl } from "@/ApiSetUp/AuthApi";
+import { StudentDashboardData } from "@/Redux/Actions/AuthUser";
+import { QrCode2 } from "@mui/icons-material";
 
 export default function StudentDashboard() {
     const dispatch = useDispatch();
@@ -54,47 +56,67 @@ export default function StudentDashboard() {
     const setFullPageLoader = usePageLoader();
     const { setSnackBar } = useSnackBar();
 
-    const stats = [
-        { name: "Pending", value: 2, color: "#f59e0b", icon: <HourglassBottom /> },
-        { name: "In Progress", value: 1, color: "#3b82f6", icon: <LocalLaundryService /> },
-        { name: "Completed", value: 5, color: "#10b981", icon: <CheckCircle /> },
-    ];
+    const [orderStats, setOrderStats] = useState([
+        { key: "QR_NOT_SCANNED", label: "QR Not Scanned", value: 0, color: "#f87171", icon: <QrCode2 /> },
+        { key: "PENDING", label: "Pending", value: 0, color: "#f59e0b", icon: <HourglassBottom /> },
+        { key: "IN_PROGRESS", label: "In Progress", value: 0, color: "#3b82f6", icon: <LocalLaundryService /> },
+        { key: "COMPLETED", label: "Completed", value: 0, color: "#10b981", icon: <CheckCircle /> },
+    ]);
 
-    // ✅ Complaint counts (Open / In Review / Resolved)
-    const complaintStats = [
-        { name: "Open", value: 3, color: "#f59e0b" },
-        { name: "In Review", value: 1, color: "#3b82f6" },
-        { name: "Resolved", value: 7, color: "#10b981" },
-    ];
+    const [complaintStats, setComplaintStats] = useState([
+        { key: "OPEN", label: "Open", value: 0, color: "#f59e0b" },
+        { key: "IN_REVIEW", label: "In Review", value: 0, color: "#3b82f6" },
+        { key: "RESOLVED", label: "Resolved", value: 0, color: "#10b981" },
+        { key: "CLOSED", label: "Closed", value: 0, color: "#64748b" },
+    ]);
+
+    const pieOrderData = orderStats.map(s => ({ name: s.label, value: s.value, color: s.color }));
+    const pieComplaintData = complaintStats.map(s => ({ name: s.label, value: s.value, color: s.color }));
+
 
     const [openEdit, setOpenEdit] = useState(false);
     const [userData, setUserData] = useState<any>({
-        full_name: "Shreeval Paladiya",
-        roll_number: "M25CSE021",
-        email: "shreevalpaladiya@gmail.com",
-        hostel_name: "G5",
-        room_number: "227",
-        department_name: "CSE",
-        passing_year: "2027",
-        phone_number: "9313321281",
-        profile_picture: "img.jpg",
+        full_name: "",
+        roll_number: "",
+        email: "",
+        hostel_name: "",
+        room_number: "",
+        department_name: "",
+        passing_year: "",
+        phone_number: "",
+        profile_picture: "",
     });
 
-    const [profile, setProfile] = useState({
-        full_name: "Shreeval Paladiya",
-        roll_number: "M25CSE021",
-        email: "shreevalpaladiya@gmail.com",
-        hostel_name: "G5",
-        room_number: "227",
-        department_name: "CSE",
-        passing_year: "2027",
-        phone_number: "9313321281",
-        profile_picture: "img.jpg",
+    const [profile, setProfile] = useState<any>({
+        full_name: "",
+        roll_number: "",
+        email: "",
+        hostel_name: "",
+        room_number: "",
+        department_name: "",
+        passing_year: "",
+        phone_number: "",
+        profile_picture: "",
     });
+
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setProfile({ ...profile, [e.target.name]: e.target.value });
     };
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem("userData");   
+            if (raw) {  
+                const parsed = JSON.parse(raw);
+                setUserData(parsed);
+                // map or normalize keys if needed
+                setProfile((p: any) => ({ ...p, ...parsed }));
+            }
+        } catch (e) {
+            // ignore parse errors
+        }
+    }, []);
 
     // 📸 Handle profile photo upload
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,34 +134,115 @@ export default function StudentDashboard() {
     const greeting =
         hours < 12 ? "Good Morning" : hours < 18 ? "Good Afternoon" : "Good Evening";
 
-    const studentProfileData = () => {
-        console.log("Fun called")
-        setFullPageLoader(true);
-        const payload: any = {
-            email: userData?.email,
-            password: userData?.password,
-        };
-        dispatch(studentProfile(payload))
-            .then((res: any) => {
-                const error = ErrorHandler(res, setSnackBar);
-                if (error) {
-                    console.log(res.payload.data, 'res')
-                    setProfile(res.payload.data)
-                }
-            })
-            .catch((err: any) => {
-                setSnackBar('error', err.message);
-            })
-            .finally(() => {
-                setFullPageLoader(false);
+    // Auth helpers
+    function getAuthToken() {
+        return localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+    }
+    function authHeaders() {
+        const token = getAuthToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        return headers;
+    }
+
+    // Save profile -> PUT /api/me
+    const saveProfile = async () => {
+        try {
+            setFullPageLoader(true);
+            // map UI profile -> API body
+            const body = {
+                fullName: profile.full_name,
+                phone: profile.phone_number,
+                passingYear: Number(profile.passing_year) || 0,
+                roomNo: profile.room_number,
+                profileImageUrl: profile.profile_picture,
+            };
+
+            const url = `${BaseUrl}/api/me`;
+            const res = await fetch(url, {
+                method: "PUT",
+                headers: authHeaders(),
+                body: JSON.stringify(body),
             });
+
+            const json = await (async () => {
+                try { return await res.json(); } catch { return null; }
+            })();
+
+            if (!res.ok) {
+                const msg = json?.message || `Request failed (${res.status})`;
+                throw new Error(msg);
+            }
+
+            // update UI state
+            const updatedProfile = { ...profile };
+            setProfile((p: any) => ({ ...p, ...profile }));
+            setUserData((u: any) => ({ ...u, ...profile }));
+            try { localStorage.setItem("userData", JSON.stringify({ ...userData, ...updatedProfile })); } catch { }
+            setSnackBar("success", "Profile updated successfully");
+            setOpenEdit(false);
+        } catch (err: any) {
+            console.error(err);
+            setSnackBar("error", err.message || "Failed to update profile");
+        } finally {
+            setFullPageLoader(false);
+        }
     };
 
-    // useEffect(() => {
-    //     let user: any = localStorage.getItem("userData")
-    //     setUserData(JSON.parse(user))
-    //     studentProfileData();
-    // }, [])
+    const _StudentDashboardData = async () => {
+            setFullPageLoader(true);
+            try {
+                const res: any = await dispatch(StudentDashboardData());
+                const ok = ErrorHandler(res, setSnackBar);
+                if (ok) {
+                    const payload = res?.payload ?? res?.data ?? res ?? {};
+                    const orders = payload.orders ?? {};
+                    const complaints = payload.complaints ?? {};
+                    
+                    setOrderStats((prev) =>
+                        prev.map((s) => ({
+                            ...s,
+                            value: Number(orders[s.key] ?? 0),
+                        }))
+                    );
+                    setComplaintStats((prev) =>
+                        prev.map((s) => ({
+                            ...s,
+                            value: Number(complaints[s.key] ?? 0),
+                        }))
+                    );
+                }
+            } catch (err: any) {
+                console.error(err);
+                setSnackBar("error", err.message || "Failed to load hostels");
+            } finally {
+                setFullPageLoader(false);
+            }
+        };
+
+    // keep profile in sync if userData changes
+    useEffect(() => {
+        setProfile((p: any) => ({ ...p, ...userData }));
+    }, [userData]);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem("userData");
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                setUserData(parsed);
+                // map or normalize keys if needed
+                setProfile((p: any) => ({ ...p, ...parsed }));
+            }
+        } catch (e) {
+            // ignore parse errors
+        }
+    }, []);
+
+    useEffect(() => {
+        _StudentDashboardData();
+    }, []);
+
 
     return (
         <>
@@ -159,7 +262,7 @@ export default function StudentDashboard() {
 
                 <Grid container spacing={4}>
                     {/* Profile Card */}
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} lg={6}>
                         <Card
                             sx={{
                                 width: "100%",
@@ -208,7 +311,7 @@ export default function StudentDashboard() {
                                         { title: "Room No", value: profile.room_number, full: false },
                                         { title: "Phone", value: profile.phone_number, full: false },
                                         { title: "Department", value: profile.department_name, full: false },
-                                        { title: "Year", value: profile.passing_year, full: false },
+                                        { title: "Passing Year", value: profile.passing_year, full: false },
                                     ].map((item, index) => (
                                         <Grid item xs={12} sm={item.full ? 12 : 6} key={index}>
                                             <Box
@@ -282,14 +385,14 @@ export default function StudentDashboard() {
                     </Grid>
 
                     {/* Dashboard Content */}
-                    <Grid item xs={12} md={8}>
+                    <Grid item xs={12} md={6}>
                         {/* Summary Cards */}
                         <Typography variant="h6" fontWeight={700} mb={2}>
-                            Complaint Status
+                            Order Status Overview
                         </Typography>
                         <Grid container spacing={3}>
-                            {stats.map((stat, index) => (
-                                <Grid item xs={12} sm={4} key={index}>
+                            {orderStats.map((stat, index) => (
+                                <Grid item xs={12} sm={6} key={index}>
                                     <Card
                                         sx={{
                                             borderRadius: 5,
@@ -327,13 +430,16 @@ export default function StudentDashboard() {
                                                 },
                                             }}
                                         >
-                                            {stat.name === "Pending" && (
+                                            {stat.label === "QR Not Scanned" && (
+                                                <QrCode2 sx={{ color: stat.color }} fontSize="large" />
+                                            )}
+                                            {stat.label === "Pending" && (
                                                 <HourglassBottom sx={{ color: stat.color }} fontSize="large" />
                                             )}
-                                            {stat.name === "In Progress" && (
+                                            {stat.label === "In Progress" && (
                                                 <LocalLaundryService sx={{ color: stat.color }} fontSize="large" />
                                             )}
-                                            {stat.name === "Completed" && (
+                                            {stat.label === "Completed" && (
                                                 <CheckCircle sx={{ color: stat.color }} fontSize="large" />
                                             )}
                                         </Box>
@@ -353,7 +459,7 @@ export default function StudentDashboard() {
                                             variant="h6"
                                             sx={{ letterSpacing: 0.5, color: "#374151" }}
                                         >
-                                            {stat.name}
+                                            {stat.label}
                                         </Typography>
                                     </Card>
                                 </Grid>
@@ -367,7 +473,7 @@ export default function StudentDashboard() {
                             </Typography>
                             <Grid container spacing={3}>
                                 {complaintStats.map((stat, index) => (
-                                    <Grid item xs={12} sm={4} key={`cmp-${index}`}>
+                                    <Grid item xs={12} sm={6} key={`cmp-${index}`}>
                                         <Card
                                             sx={{
                                                 borderRadius: 5,
@@ -393,7 +499,7 @@ export default function StudentDashboard() {
                                                 <CountUp start={0} end={stat.value} duration={1.2} />
                                             </Typography>
                                             <Typography variant="h6" sx={{ letterSpacing: 0.5, color: "#374151" }}>
-                                                {stat.name}
+                                                {stat.label}
                                             </Typography>
                                         </Card>
                                     </Grid>
@@ -401,7 +507,7 @@ export default function StudentDashboard() {
                             </Grid>
                         </Box>
 
-                        {/* ✅ Both Pie Charts inside ONE container */}
+                        {/* Pie charts container omitted for brevity (unchanged) */}
                         <Card
                             sx={{
                                 borderRadius: 5,
@@ -416,7 +522,6 @@ export default function StudentDashboard() {
                             </Typography>
 
                             <Grid container spacing={3}>
-                                {/* Left Pie: Order Status Overview */}
                                 <Grid item xs={12} md={6}>
                                     <Card
                                         variant="outlined"
@@ -428,35 +533,16 @@ export default function StudentDashboard() {
                                         <Box sx={{ width: "100%", height: 280 }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <PieChart>
-                                                    <Pie
-                                                        data={stats}
-                                                        dataKey="value"
-                                                        nameKey="name"
-                                                        cx="50%"
-                                                        cy="50%"
-                                                        outerRadius={100}
-                                                        label={({ name, value }) => `${name}: ${value}`}
-                                                    >
-                                                        {stats.map((entry, index) => (
-                                                            <Cell key={`o-cell-${index}`} fill={entry.color} />
-                                                        ))}
+                                                    <Pie data={pieOrderData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, value }) => `${name}: ${value}`}>
+                                                        {pieOrderData.map((entry, index) => <Cell key={`o-cell-${index}`} fill={entry.color} />)}
                                                     </Pie>
-                                                    <ReTooltip
-                                                        contentStyle={{
-                                                            backgroundColor: "white",
-                                                            border: "1px solid #e5e7eb",
-                                                            borderRadius: "8px",
-                                                            padding: "8px 12px",
-                                                            boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-                                                        }}
-                                                    />
+                                                    <ReTooltip contentStyle={{ backgroundColor: "white", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "8px 12px", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }} />
                                                 </PieChart>
                                             </ResponsiveContainer>
                                         </Box>
                                     </Card>
                                 </Grid>
 
-                                {/* Right Pie: Complaint Status Overview */}
                                 <Grid item xs={12} md={6}>
                                     <Card
                                         variant="outlined"
@@ -468,28 +554,10 @@ export default function StudentDashboard() {
                                         <Box sx={{ width: "100%", height: 280 }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <PieChart>
-                                                    <Pie
-                                                        data={complaintStats}
-                                                        dataKey="value"
-                                                        nameKey="name"
-                                                        cx="50%"
-                                                        cy="50%"
-                                                        outerRadius={100}
-                                                        label={({ name, value }) => `${name}: ${value}`}
-                                                    >
-                                                        {complaintStats.map((entry, index) => (
-                                                            <Cell key={`c-cell-${index}`} fill={entry.color} />
-                                                        ))}
+                                                    <Pie data={pieComplaintData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, value }) => `${name}: ${value}`}>
+                                                        {pieComplaintData.map((entry, index) => <Cell key={`c-cell-${index}`} fill={entry.color} />)}
                                                     </Pie>
-                                                    <ReTooltip
-                                                        contentStyle={{
-                                                            backgroundColor: "white",
-                                                            border: "1px solid #e5e7eb",
-                                                            borderRadius: "8px",
-                                                            padding: "8px 12px",
-                                                            boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-                                                        }}
-                                                    />
+                                                    <ReTooltip contentStyle={{ backgroundColor: "white", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "8px 12px", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }} />
                                                 </PieChart>
                                             </ResponsiveContainer>
                                         </Box>
@@ -557,7 +625,7 @@ export default function StudentDashboard() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenEdit(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={() => setOpenEdit(false)}>
+                    <Button variant="contained" onClick={saveProfile}>
                         Save
                     </Button>
                 </DialogActions>

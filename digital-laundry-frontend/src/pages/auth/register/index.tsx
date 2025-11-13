@@ -18,22 +18,22 @@ import LocalLaundryServiceIcon from "@mui/icons-material/LocalLaundryService";
 import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import { useDispatch } from "react-redux";
-import { staffRegisterAction, staffSingup, studentSignup } from "@/Redux/Actions/AuthUser";
 import ErrorHandler from "@/lib/errorHandler";
+import { hostelDetails, SendOtp, StaffSingup, StudentSignup, VerifyEmail } from "@/Redux/Actions/AuthUser";
 
 const DarkPaper = (props: any) => (
     <Paper
         {...props}
         sx={{
-            backgroundColor: "rgba(30,41,59,0.95)", // dark bluish background
+            backgroundColor: "rgba(30,41,59,0.95)",
             color: "white",
             "& .MuiAutocomplete-option": {
                 color: "white",
                 "&[aria-selected='true']": {
-                    backgroundColor: "rgba(59,130,246,0.3)", // selected bg
+                    backgroundColor: "rgba(59,130,246,0.3)",
                 },
                 "&:hover": {
-                    backgroundColor: "rgba(59,130,246,0.5)", // hover bg
+                    backgroundColor: "rgba(59,130,246,0.5)",
                 },
             },
         }}
@@ -47,33 +47,13 @@ const Register = () => {
     const setFullPageLoader = usePageLoader();
     const { setSnackBar } = useSnackBar();
 
-    const [role, setRole] = useState("student");
-    const [hostel, setHostel] = useState<any>('Hostel A');
+    const [role, setRole] = useState("STUDENT");
+    const [hostel, setHostel] = useState<any>([]);
 
-    // const [email, setEmail] = useState("");
     const [otp, setOtp] = useState("");
     const [isOtpSent, setIsOtpSent] = useState(false);
     const [isVerified, setIsVerified] = useState(false);
-
-    const handleSendOtp = async () => {
-        // API call to send OTP
-        console.log("OTP sent to", data?.email);
-        setIsOtpSent(true);
-    };
-
-    const handleVerifyOtp = async () => {
-        // API call to verify OTP
-        if (otp === "123456") {
-            setIsVerified(true);
-            setIsOtpSent(false);
-            setOtp('');
-            alert("✅ Email verified!");
-        } else {
-            setIsOtpSent(false);
-            setOtp('');
-            alert("❌ Invalid OTP!");
-        }
-    };
+    const [isSubmitted, setIsSubmitted] = useState(false);
 
     const [data, setData] = useState<any>({
         name: '',
@@ -95,6 +75,84 @@ const Register = () => {
         confirmPassword: '',
         staffCode: '',
     });
+
+    const handleSendOtp = async () => {
+        try {
+            setFullPageLoader(true);
+            const body = {
+                email: data?.email,
+            };
+
+            const res: any = await dispatch(SendOtp(body));
+            const error = ErrorHandler(res, setSnackBar);
+
+            if (!error) {
+                setSnackBar('error', res?.payload?.data?.message || 'somthing wrong!');
+                setFullPageLoader(false);
+                return;
+            }
+            setIsOtpSent(true);
+            setSnackBar('success', 'OTP sent successfully.');
+        } catch (error: any) {
+            console.error('Login error:', error);
+            setSnackBar('error', error?.message || 'Something went wrong during login');
+            setFullPageLoader(false);
+        } finally {
+            setFullPageLoader(false);
+        }
+    };
+
+    const handleVerifyOtp = async () => {
+        try {
+            setFullPageLoader(true);
+            const body = {
+                email: data?.email,
+                otp: otp
+            };
+
+            const res: any = await dispatch(VerifyEmail(body));
+            const error = ErrorHandler(res, setSnackBar);
+
+            if (!error) {
+                setSnackBar('error', res?.payload?.data?.message || 'Invalid OTP! or Smoething wrong');
+                setIsOtpSent(false);
+                setOtp('');
+                setFullPageLoader(false);
+                return;
+            }
+            setIsVerified(true);
+            setIsOtpSent(false);
+            setSnackBar('success', 'Email verified!');
+            setTimeout(() => {
+                router.push('/auth/login');
+            }, 500);  
+        } catch (error: any) {
+            console.error('Login error:', error);
+            setSnackBar('error', error?.message || 'Invalid OTP! or Smoething wrong');
+            setIsOtpSent(false);
+            setOtp('');
+            setFullPageLoader(false);
+        } finally {
+            setFullPageLoader(false);
+        }
+    };
+
+    const getHostelDetails = () => {
+        const payload: any = {
+            status : 'ACTIVE'
+        };
+        dispatch(hostelDetails(payload))
+            .then((res: any) => {
+                const error = ErrorHandler(res, setSnackBar);
+                if (error) {
+                    console.log(res?.payload, 'res')
+                    setHostel(res?.payload);
+                }
+            })
+            .catch((err: any) => {
+                setSnackBar('error', err.message || 'Something went wrong!');
+            })
+    };
 
     const handleChangeInput = (e: any, name1?: any, newValue?: any) => {
         const { name, value } = e.target;
@@ -224,20 +282,20 @@ const Register = () => {
         }
 
 
-        if (!data?.rollNo && role === "student") {
+        if (!data?.rollNo && role === "STUDENT") {
             tempErrors.rollNo = "Roll Number is required";
             isValid = false;
         }
-        if (!data?.hostel && role === "student") {
+        if (!data?.hostel && role === "STUDENT") {
             tempErrors.hostel = "Hostel is required";
             isValid = false;
         }
-        if (!data?.roomNo && role === "student") {
+        if (!data?.roomNo && role === "STUDENT") {
             tempErrors.roomNo = "Room Number is required";
             isValid = false;
         }
 
-        if (!data?.staffCode && role === "staff") {
+        if (!data?.staffCode && role === "STAFF") {
             tempErrors.staffCode = "staff Code is required";
             isValid = false;
         }
@@ -254,25 +312,27 @@ const Register = () => {
             "fullName": data?.name,
             "email": data?.email,
             "password": data?.password,
-            "confirmPassword": data?.confirmPassword,
         };
 
-        if (role === "student") {
-            body.hostelName = data?.hostel;
-            body.roomNumber = data?.roomNo;
+        if (role === "STUDENT") {
+            body.hostelCode = data?.hostel;
+            body.roomNo = data?.roomNo;
             body.rollNumber = data?.rollNo;
         } else {
             body.staffCode = data?.staffCode;
         }
 
-        dispatch(role === 'student' ? studentSignup(body) : staffRegisterAction(body))
+        dispatch(role === 'STUDENT' ? StudentSignup(body) : StaffSingup(body))
             .then((res: any) => {
                 const error = ErrorHandler(res, setSnackBar);
                 console.log(res, 'res signup')
                 if (error) {
-                    //  localStorage.setItem("uer")
-                    setSnackBar('success', res.payload.message);
-                    router.push('/auth/login');
+                    console.log(res, 'response')
+                    setIsSubmitted(true);
+                    setIsOtpSent(true);
+                    setSnackBar('success', 'Registered successfully. First verify email and after login');
+                } else{
+                    setSnackBar('error', 'Please provide correct details.');
                 }
             })
             .catch((err: any) => {
@@ -308,11 +368,13 @@ const Register = () => {
         setIsVerified(false)
         setIsOtpSent(false)
         setOtp('')
+        if (role === 'STUDENT'){
+            getHostelDetails();
+        }
     }, [role])
 
     return (
         <AuthWrapper>
-            {/* Title */}
             <Typography variant="h4" fontWeight="700" gutterBottom>
                 📝 Register
             </Typography>
@@ -335,7 +397,7 @@ const Register = () => {
                             fontWeight: 600,
                             borderRadius: "20px",
                             background:
-                                role === "student"
+                                role === "STUDENT"
                                     ? "linear-gradient(135deg, #1e3a8a, #2563eb)" // active
                                     : "rgba(255,255,255,0.1)",
                             color: "white",
@@ -348,7 +410,7 @@ const Register = () => {
                                 boxShadow: "0px 6px 20px rgba(0,0,0,0.4)",
                             },
                         }}
-                        onClick={() => setRole("student")}
+                        onClick={() => setRole("STUDENT")}
                     >
                         <Typography variant="h5">👤 Student</Typography>
                         <Typography variant="body2" sx={{ mt: 1 }}>
@@ -366,7 +428,7 @@ const Register = () => {
                             fontWeight: 600,
                             borderRadius: "20px",
                             background:
-                                role === "staff"
+                                role === "STAFF"
                                     ? "linear-gradient(135deg, #9333ea, #ec4899)" // active
                                     : "rgba(255,255,255,0.1)",
                             color: "white",
@@ -379,7 +441,7 @@ const Register = () => {
                                 boxShadow: "0px 6px 20px rgba(0,0,0,0.4)",
                             },
                         }}
-                        onClick={() => setRole("staff")}
+                        onClick={() => setRole("STAFF")}
                     >
                         <Box
                             sx={{
@@ -407,10 +469,10 @@ const Register = () => {
                 },
             }}>
                 <Typography variant="h6" sx={{ mb: 2 }}>
-                    {role === "student" ? "Register as Student" : "Register as Laundry Staff"}
+                    {role === "STUDENT" ? "Register as Student" : "Register as Laundry Staff"}
                 </Typography>
 
-                {role === "student" ? (
+                {role === "STUDENT" ? (
                     <Grid container spacing={2}>
                         {/* Full Name */}
                         <Grid item xs={12}>
@@ -500,7 +562,7 @@ const Register = () => {
                                             background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
                                         }}
                                         onClick={handleSendOtp}
-                                        disabled={!data?.email}
+                                        disabled={!isSubmitted}
                                     >
                                         Send OTP
                                     </Button>
@@ -547,18 +609,10 @@ const Register = () => {
                         {/* Hostel */}
                         <Grid item xs={12} md={6}>
                             <Autocomplete
-                                options={[
-                                    "G1",
-                                    "G2",
-                                    "G3",
-                                    "G4",
-                                    "G5",
-                                ]}
-                                // value={hostel} // state variable
+                                options={hostel?.map((item: any) => item?.hostelCode) || []}
                                 PaperComponent={DarkPaper}
                                 value={data?.hostel}
                                 onChange={(e, newValue) => handleChangeInput(e, 'hostel', newValue)}
-                                // onChange={(e, newValue) => setHostel(newValue)}
                                 renderInput={(params) => (
                                     <TextField
                                         {...params}
@@ -720,7 +774,7 @@ const Register = () => {
                                             background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
                                         }}
                                         onClick={handleSendOtp}
-                                        disabled={!data?.email}
+                                        disabled={!isSubmitted}
                                     >
                                         Send OTP
                                     </Button>
@@ -850,14 +904,14 @@ const Register = () => {
                         fontWeight: 600,
                         borderRadius: "50px",
                         background:
-                            role === "student"
+                            role === "STUDENT"
                                 ? "linear-gradient(135deg, #1e3a8a, #2563eb)"
                                 : "linear-gradient(135deg, #9333ea, #ec4899)",
                         "&:hover": { opacity: 0.9 },
                     }}
                     onClick={() => handleSubmit()}
                 >
-                    {role === "student" ? "Register as Student" : "Register as Staff"}
+                    {role === "STUDENT" ? "Register as Student" : "Register as Staff"}
                 </Button>
 
                 {/* Login Link */}
@@ -873,7 +927,7 @@ const Register = () => {
                                 "&:hover": {
                                     textDecoration: "underline",
                                     transform: "scale(1.05)",
-                                    color: role === "student" ? "#06274f" : "#5d0934",
+                                    color: role === "STUDENT" ? "#06274f" : "#5d0934",
                                 },
                             }}
                             onClick={() => router.push("/auth/login")}

@@ -43,6 +43,13 @@ import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import FeedbackIcon from "@mui/icons-material/Feedback";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import cookieUtils from "@/ApiSetUp/CookieUtils";
+
+import { useDispatch } from "react-redux";
+import { notificationData } from "@/Redux/Actions/AuthUser";
+import ErrorHandler from "@/lib/errorHandler";
+import { BaseUrl } from "@/ApiSetUp/AuthApi";
 
 const drawerWidth = 300;
 
@@ -136,33 +143,34 @@ const Drawer = styled(MuiDrawer, {
 export default function PrivateLayout({ children }: any) {
   const theme = useTheme();
   const [open, setOpen] = useState<any>(false);
-  const [role, setRole] = useState<string>("student");
+  const [role, setRole] = useState<string>("");
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const router = useRouter();
   const pathname = usePathname();
+  const dispatch = useDispatch();
 
   const menuData = [
-    { name: "Profile", icon: <PersonIcon />, link: "/user/userProfile", isShow: role === "student" },
-    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/user/userAddEntry", isShow: role === "student" },
-    { name: "History", icon: <HistoryIcon />, link: "/user/userHistory", isShow: role === "student" },
-    { name: "Complaints", icon: <ReportProblemIcon />, link: "/user/userComplaint", isShow: role === "student" },
-    { name: "Scan Entry", icon: <QrCodeScannerIcon />, link: "/staff/staffScanEntry", isShow: role === "staff" },
-    { name: "Manage Orders", icon: <ListAltIcon />, link: "/staff/staffOrder", isShow: role === "staff" },
-    { name: "Manage Complaints", icon: <FeedbackIcon />, link: "/staff/staffComplaint", isShow: role === "staff"},
-    { name: "Admin Setup", icon: <AdminPanelSettingsIcon />, link: "/admin/configuration", isShow: role === "admin" },
-    { name: "Order Lookup", icon: <ListAltIcon />, link: "/admin/allOrdersEntry", isShow: role === "admin" },
-    { name: "All Complaints", icon: <ReportProblemIcon />, link: "/admin/allComplaint", isShow: role === "admin" }
+    { name: "Profile", icon: <PersonIcon />, link: "/user/userProfile", isShow: role === "STUDENT" },
+    { name: "Add entry", icon: <AddCircleOutlineIcon />, link: "/user/userAddEntry", isShow: role === "STUDENT" },
+    { name: "History", icon: <HistoryIcon />, link: "/user/userHistory", isShow: role === "STUDENT" },
+    { name: "Complaints", icon: <ReportProblemIcon />, link: "/user/userComplaint", isShow: role === "STUDENT" },
+    { name: "Scan Entry", icon: <QrCodeScannerIcon />, link: "/staff/staffScanEntry", isShow: role === "STAFF" },
+    { name: "Manage Orders", icon: <ListAltIcon />, link: "/staff/staffOrder", isShow: role === "STAFF" },
+    { name: "Manage Complaints", icon: <FeedbackIcon />, link: "/staff/staffComplaint", isShow: role === "STAFF" },
+    { name: "Admin Dashboard", icon: <DashboardIcon />, link: "/admin/dashboard", isShow: role === "ADMIN" },
+    { name: "Admin Setup", icon: <AdminPanelSettingsIcon />, link: "/admin/configuration", isShow: role === "ADMIN" },
+    { name: "Order Lookup", icon: <ListAltIcon />, link: "/admin/allOrdersEntry", isShow: role === "ADMIN" },
+    { name: "All Complaints", icon: <ReportProblemIcon />, link: "/admin/allComplaint", isShow: role === "ADMIN" },
   ];
 
-  // useEffect(() => {
-  //   const r = localStorage.getItem("role") || "";
-  //   setRole(r);
-  // }, []);
+  useEffect(() => {
+    const r = localStorage.getItem("role") || "";
+    setRole(r);
+  }, []);
 
   // Light sidebar colors
   const drawerColor = "#f3f4f6";
   const textColor = "#1f2937";
-  const activeItemColor = "#3b82f6";
 
   const handleDrawerOpen = () => setOpen(true);
   const handleDrawerClose = () => setOpen(false);
@@ -180,30 +188,174 @@ export default function PrivateLayout({ children }: any) {
   const openNoti = (e: React.MouseEvent<HTMLElement>) => setNotiAnchor(e.currentTarget);
   const closeNoti = () => setNotiAnchor(null);
   const [tab, setTab] = useState(0);
+  const [data, setData] = useState<any>("");
 
-  // ----------------- Mock data (swap with API) -----------------
-  // Student sees pending & resolved orders
-  const studentPending = [
-    { id: "LDR-2025-0042", date: "2025-11-02", items: 4, status: "Pending" },
-    { id: "LDR-2025-0045", date: "2025-11-04", items: 2, status: "Pending" },
-  ];
-  const studentResolved = [
-    { id: "LDR-2025-0031", date: "2025-10-29", items: 5, status: "Completed" },
-  ];
+  // ----------------- Notifications from API -----------------
+  const [notifications, setNotifications] = useState<
+    {
+      id: string;
+      type: string;
+      payload: any;
+      isRead: boolean;
+      createdAt: string | null;
+      raw?: any;
+    }[]
+  >([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
 
-  // Staff sees open complaints
-  const staffOpenComplaints = [
-    { id: "CMP-24017", title: "Washed shirt shrank", order: "LDR-2025-0040", time: "Today 10:15", status: "Open" },
-    { id: "CMP-24018", title: "Missing socks", order: "LDR-2025-0041", time: "Today 09:05", status: "Open" },
-  ];
+  // ----------------- Load notifications via action (matches your provided shape) -----------------
+  const loadNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const payload: any = { page: 1, pageSize: 200 };
+      // @ts-ignore
+      const res: any = await dispatch(notificationData(payload));
+      const ok = ErrorHandler(res, () => { });
+      // parse response body robustly
+      const body = res?.payload ?? res?.data ?? res ?? null;
+      let arr: any[] = [];
+
+      if (Array.isArray(body)) arr = body;
+      else if (Array.isArray(body?.data)) arr = body.data;
+      else if (Array.isArray(body?.notifications)) arr = body.notifications;
+      else arr = [];
+
+      const mapped = arr
+        .filter((n: any) => !n?.isRead) 
+        .map((n: any) => ({
+          id: String(n.id),
+          type: String(n.type ?? "").toUpperCase(),
+          payload: n.payload ?? {},
+          isRead: Boolean(n.isRead),
+          createdAt: n.createdAt ?? n.created_at ?? null,
+          raw: n,
+        }));
+
+      setNotifications(mapped);
+    } catch (err: any) {
+      console.error("loadNotifications error:", err);
+      setNotifications([]);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("userData");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setData(parsed);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // load notifications on mount
+    loadNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // MARK AS READ API call
+  const markNotificationRead = async (notificationId: string) => {
+    if (!notificationId) return;
+    try {
+      // optimistically update UI after successful API call
+      const token = cookieUtils.getCookie?.("token") ?? null;
+
+      const url =
+        (`${BaseUrl}`) + `/api/notifications/${notificationId}/read`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({}), // keep body empty unless backend expects something
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("markNotificationRead failed:", res.status, errText);
+        // try reading JSON error
+        try {
+          const json = JSON.parse(errText);
+          ErrorHandler(json, () => { });
+        } catch {
+          // ignore
+        }
+        return false;
+      }
+
+      loadNotifications();
+      return true;
+    } catch (err: any) {
+      console.error("markNotificationRead error:", err);
+      return false;
+    }
+  };
+
+  // helper used by View buttons to mark read then navigate
+  const handleViewNotification = async (notificationId: string, navigateTo: string) => {
+    try {
+      // call API to mark read (await so UI stays consistent)
+      await markNotificationRead(notificationId);
+    } catch (e) {
+      // swallow - we still navigate even if marking fails
+      console.error(e);
+    } finally {
+      if (navigateTo) router.push(navigateTo);
+      closeNoti();
+    }
+  };
+
+  // derive UI arrays from notifications (using the types you provided)
+  const staffOpenComplaints = useMemo(() => {
+    // show complaints that are in-review / opened
+    return notifications
+      .filter((n) => n.type.startsWith("COMPLAINT_") && (n.type === "COMPLAINT_IN_REVIEW" || n.type === "COMPLAINT_OPEN"))
+      .map((n) => ({
+        id: n.payload?.complaintId ?? n.id,
+        title: n.raw?.title ?? `Complaint ${n.payload?.complaintId ?? n.id}`,
+        order: n.raw?.payload?.orderId ?? "",
+        time: n.createdAt ?? "",
+        status: n.type === "COMPLAINT_IN_REVIEW" ? "In Review" : "Open",
+        _notifId: n.id, // preserve notification id for marking read
+      }));
+  }, [notifications]);
+
+  const studentPending = useMemo(() => {
+    return notifications
+      .filter((n) => n.type === "ORDER_PENDING")
+      .map((n) => ({
+        id: n.payload?.orderId ?? n.id,
+        date: n.createdAt ?? "",
+        items: n.raw?.payload?.items?.length ?? 0,
+        status: "Pending",
+        _notifId: n.id,
+      }));
+  }, [notifications]);
+
+  const studentResolved = useMemo(() => {
+    // server may send ORDER_COMPLETED or COMPLAINT_RESOLVED — include both to populate the "resolved" tab meaningfully
+    return notifications
+      .filter((n) => n.type === "ORDER_COMPLETED" || n.type === "COMPLAINT_RESOLVED")
+      .map((n) => ({
+        id: (n.payload?.orderId ?? n.payload?.complaintId) ?? n.id,
+        date: n.createdAt ?? "",
+        items: n.raw?.payload?.items?.length ?? 0,
+        status: n.type === "ORDER_COMPLETED" ? "Completed" : "Resolved",
+        _notifId: n.id,
+      }));
+  }, [notifications]);
 
   const badgeCount = useMemo(() => {
-    if (role === "staff") return staffOpenComplaints.length;
-    // student
+    if (String(role).toLowerCase() === "staff") return staffOpenComplaints.length;
     return studentPending.length + studentResolved.length;
-  }, [role]);
+  }, [role, staffOpenComplaints, studentPending, studentResolved]);
 
-  // Chip styles
+  // Chip styles kept same as before
   const chipFor = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
@@ -218,7 +370,7 @@ export default function PrivateLayout({ children }: any) {
     }
   };
 
-  // Drawer content
+  // Drawer content (unchanged)
   const drawer = (
     <>
       <DrawerHeader>
@@ -319,25 +471,33 @@ export default function PrivateLayout({ children }: any) {
               <Typography variant="body1">{""}</Typography>
 
               {/* Notifications with badge */}
-              <Tooltip title="Notifications">
-                <IconButton color="inherit" onClick={openNoti}>
-                  <Badge badgeContent={badgeCount} color="error">
-                    <Notifications />
-                  </Badge>
+              {role !== "ADMIN" && (
+                <>
+                  <Tooltip title="Notifications">
+                    <IconButton color="inherit" onClick={openNoti}>
+                      <Badge badgeContent={badgeCount} color="error">
+                        <Notifications />
+                      </Badge>
+                    </IconButton>
+                  </Tooltip>
+                  <Avatar sx={{ bgcolor: "#facc15" }} src={data?.profile_picture}>
+                    {!data?.profile_picture ? (data?.full_name?.trim()?.[0] || data?.email?.trim()?.[0] || "?").toUpperCase() : null}
+                  </Avatar>
+                </>
+              )}
+              <Tooltip title="Logout">
+                <IconButton
+                  onClick={() => {
+                    localStorage.clear();
+                    cookieUtils.removeCookie("token");
+                    cookieUtils.removeCookie("userData");
+                    router.push("/auth/login");
+                  }}
+                  sx={{ color: "#fff" }}
+                >
+                  <LogoutIcon />
                 </IconButton>
               </Tooltip>
-
-              <Avatar sx={{ bgcolor: "#facc15" }}>S</Avatar>
-
-              <IconButton
-                onClick={() => {
-                  localStorage.clear();
-                  router.push("/auth/login");
-                }}
-                sx={{ color: "#fff" }}
-              >
-                <LogoutIcon />
-              </IconButton>
             </Box>
           </Box>
         </Toolbar>
@@ -422,7 +582,7 @@ export default function PrivateLayout({ children }: any) {
 
         {/* Tabs */}
         <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-          {role === "staff" ? (
+          {role?.toLowerCase() === "staff" ? (
             <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth">
               <Tab label={`Open Complaints (${staffOpenComplaints.length})`} />
             </Tabs>
@@ -437,7 +597,7 @@ export default function PrivateLayout({ children }: any) {
         {/* Tab Panels */}
         <Box sx={{ maxHeight: 360, overflowY: "auto", p: 1.5 }}>
           {/* Student: Pending */}
-          {role !== "staff" && tab === 0 && (
+          {role?.toLowerCase() !== "staff" && tab === 0 && (
             <Stack spacing={1.25}>
               {studentPending.length === 0 && (
                 <Typography variant="body2" color="text.secondary" textAlign="center" py={3}>
@@ -484,8 +644,8 @@ export default function PrivateLayout({ children }: any) {
                     <Button
                       size="small"
                       onClick={() => {
-                        router.push("/user/userHistory");
-                        closeNoti();
+                        // mark notification read then navigate to history
+                        handleViewNotification(o._notifId ?? o.id, "/user/userHistory");
                       }}
                     >
                       View
@@ -497,7 +657,7 @@ export default function PrivateLayout({ children }: any) {
           )}
 
           {/* Student: Resolved */}
-          {role !== "staff" && tab === 1 && (
+          {role?.toLowerCase() !== "staff" && tab === 1 && (
             <Stack spacing={1.25}>
               {studentResolved.length === 0 && (
                 <Typography variant="body2" color="text.secondary" textAlign="center" py={3}>
@@ -544,8 +704,7 @@ export default function PrivateLayout({ children }: any) {
                     <Button
                       size="small"
                       onClick={() => {
-                        router.push("/user/userHistory");
-                        closeNoti();
+                        handleViewNotification(o._notifId ?? o.id, "/user/userHistory");
                       }}
                     >
                       View
@@ -557,7 +716,7 @@ export default function PrivateLayout({ children }: any) {
           )}
 
           {/* Staff: Open Complaints */}
-          {role === "staff" && tab === 0 && (
+          {role?.toLowerCase() === "staff" && tab === 0 && (
             <Stack spacing={1.25}>
               {staffOpenComplaints.length === 0 && (
                 <Typography variant="body2" color="text.secondary" textAlign="center" py={3}>
@@ -597,15 +756,15 @@ export default function PrivateLayout({ children }: any) {
                         {c.title}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" noWrap>
-                        {c.id} • {c.order} 
+                        {c.id} • {c.order}
                       </Typography>
                     </Box>
                     <Chip size="small" label={chip.label} sx={chip.sx} />
                     <Button
                       size="small"
                       onClick={() => {
-                        router.push("/user/userComplaint");
-                        closeNoti();
+                        // mark complaint notification read then navigate to complaint list
+                        handleViewNotification(c._notifId ?? c.id, "/user/userComplaint");
                       }}
                     >
                       View

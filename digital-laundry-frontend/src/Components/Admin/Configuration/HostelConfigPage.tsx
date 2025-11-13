@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
     Box,
     Card,
@@ -23,32 +23,52 @@ import {
     DialogActions,
     Switch,
     Chip,
+    CircularProgress,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ClearIcon from "@mui/icons-material/Clear";
 import HomeWorkIcon from "@mui/icons-material/HomeWork";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import DownloadIcon from "@mui/icons-material/Download";
+import { useDispatch } from "react-redux";
+import useSnackBar from "@/Redux/hooks/useSnackBar";
+import ErrorHandler from "@/lib/errorHandler";
+import { hostelCreate, hostelDetails } from "@/Redux/Actions/AuthUser";
+import { BaseUrl } from "@/ApiSetUp/AuthApi";
 
 type HostelRow = {
     id: string;
     name: string;
-    code: string; 
+    code: string;
     isActive: boolean;
 };
 
+function getAuthToken() {
+    return localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+}
+
+function authHeaders() {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
+}
+
 export default function HostelConfigPage() {
-    const [rows, setRows] = useState<HostelRow[]>([
-        { id: "h1", name: "A-Block Hostel", code: "A-BLOCK", isActive: true },
-        { id: "h2", name: "B-Block Hostel", code: "B-BLOCK", isActive: true },
-        { id: "h3", name: "C-Block Hostel", code: "C-BLOCK", isActive: false },
-    ]);
+    const dispatch = useDispatch();
+    const { setSnackBar } = useSnackBar();
+
+    const [rows, setRows] = useState<HostelRow[]>([]);
+    const [loading, setLoading] = useState(false);
 
     // Filters
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">("All");
+
+    const [refreshFlag, setRefreshFlag] = useState(0);
 
     const filtered = useMemo(() => {
         const s = search.trim().toLowerCase();
@@ -62,7 +82,7 @@ export default function HostelConfigPage() {
     // Dialog state
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState<HostelRow | null>(null);
-    const [form, setForm] = useState<Omit<HostelRow, "id">>({ name: "", code: '', isActive: true });
+    const [form, setForm] = useState<{ name: string; code: string; isActive: boolean }>({ name: "", code: '', isActive: true });
 
     const openCreate = () => {
         setEditing(null);
@@ -76,25 +96,125 @@ export default function HostelConfigPage() {
         setOpen(true);
     };
 
-    const save = () => {
-        if (!form.name.trim() || !form.code.trim()) return;
-        if (editing) {
-            setRows(prev => prev.map(r => (r.id === editing.id ? { ...editing, ...form } : r)));
-        } else {
-            setRows(prev => [...prev, { id: `h_${Date.now()}`, ...form }]);
-        }
-        setOpen(false);
-    };
-
-    const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); } catch { } };
-
-    const requestDelete = (id: string) => setConfirm({ open: true, id });
+    // Confirm delete
     const [confirm, setConfirm] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
-    const doDelete = () => {
+    const requestDelete = (id: string) => setConfirm({ open: true, id });
+
+    const doDelete = async () => {
         if (!confirm.id) return;
-        setRows(prev => prev.filter(r => r.id !== confirm.id));
-        setConfirm({ open: false, id: null });
+        try {
+            setLoading(true);
+            const url = `${BaseUrl}/api/admin/hostels/${confirm.id}`;
+            const res = await fetch(url, {
+                method: "DELETE",
+                headers: authHeaders(),
+            });
+            if (!res.ok) {
+                // try to parse error body for message
+                let text = `${res.status}`;
+                try { const j = await res.json(); text = j?.message || JSON.stringify(j); } catch { }
+                throw new Error(`Delete failed ${text}`);
+            }
+            setSnackBar("success", "Hostel deleted");
+            setRows(prev => prev.filter(r => r.id !== confirm.id));
+            setConfirm({ open: false, id: null });
+        } catch (err: any) {
+            console.error(err);
+            setSnackBar("error", err.message || "Failed to delete hostel");
+        } finally {
+            setLoading(false);
+        }
     };
+
+    // copy
+    const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); setSnackBar("success", "Copied to clipboard"); } catch { setSnackBar("error", "Copy failed"); } };
+
+    // save -> create (dispatch) or update (manual PUT)
+    const save = async () => {
+        if (!form.name.trim() || !form.code.trim()) {
+            setSnackBar("warning", "Please provide name and code");
+            return;
+        }
+
+        if (editing) {
+            // update via PUT /api/admin/hostels/:id (use API_BASE + auth header)
+            try {
+                setLoading(true);
+                const payload = { hostelName: form.name, hostelCode: form.code, status: form.isActive ? "ACTIVE" : "INACTIVE" };
+                const url = `${BaseUrl}/api/admin/hostels/${editing.id}`;
+                const res = await fetch(url, {
+                    method: "PUT",
+                    headers: authHeaders(),
+                    body: JSON.stringify(payload),
+                });
+                if (!res.ok) {
+                    let text = `${res.status}`;
+                    try { const j = await res.json(); text = j?.message || JSON.stringify(j); } catch { }
+                    throw new Error(`Update failed ${text}`);
+                }
+                // optimistic update
+                setRows(prev => prev.map(r => r.id === editing.id ? { ...r, name: form.name, code: form.code, isActive: form.isActive } : r));
+                setSnackBar("success", "Hostel updated");
+                setOpen(false);
+            } catch (err: any) {
+                console.error(err);
+                setSnackBar("error", err.message || "Failed to update hostel");
+            } finally {
+                setLoading(false);
+            }
+        } else {
+            try {
+                setLoading(true);
+                const payload: any = { hostelName: form.name, hostelCode: form.code, status: form.isActive ? "ACTIVE" : "INACTIVE" };
+                const res: any = await dispatch(hostelCreate(payload));
+                const ok = ErrorHandler(res, setSnackBar);
+                if (ok) {
+                    // backend may return created object in res.payload
+                    const created = res?.payload ?? res?.data ?? null;
+                    if (created && created.id) {
+                        setRows(prev => [{ id: created.id, name: created.hostelName || form.name, code: created.hostelCode || form.code, isActive: (created.status || "ACTIVE") === "ACTIVE" }, ...prev]);
+                    } else {
+                        // fallback: refetch
+                        setRefreshFlag(f => f + 1);
+                    }
+                    setSnackBar("success", "Hostel created");
+                    setOpen(false);
+                }
+            } catch (err: any) {
+                console.error(err);
+                setSnackBar("error", err.message || "Failed to create hostel");
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
+    // load list (dispatch hostelDetails)
+    const loadHostels = async () => {
+        setLoading(true);
+        try {
+            const payload: any = { status: statusFilter === "All" ? undefined : statusFilter === "Active" ? "ACTIVE" : "INACTIVE" };
+            const res: any = await dispatch(hostelDetails(payload));
+            const ok = ErrorHandler(res, setSnackBar);
+            if (ok) {
+                // res.payload or res.payload.data might be the array
+                const data = res?.payload ?? res?.payload?.data ?? res?.data ?? res;
+                const arr = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+                const mapped = arr.map((h: any) => ({ id: h.id, name: h.hostelName, code: h.hostelCode, isActive: h.status === "ACTIVE" } as HostelRow));
+                setRows(mapped);
+            }
+        } catch (err: any) {
+            console.error(err);
+            setSnackBar("error", err.message || "Failed to load hostels");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadHostels();
+        // refresh when filter or external refreshFlag changes
+    }, [statusFilter, refreshFlag]);
 
     return (
         <Card sx={{ borderRadius: 4, overflow: "hidden" }}>
@@ -144,6 +264,11 @@ export default function HostelConfigPage() {
                             Reset
                         </Button>
                     )}
+
+                    <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => setRefreshFlag(f => f + 1)}>
+                        Refresh
+                    </Button>
+
                     <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
                         Add Hostel
                     </Button>
@@ -161,7 +286,13 @@ export default function HostelConfigPage() {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {filtered.length ? (
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
+                                    <CircularProgress />
+                                </TableCell>
+                            </TableRow>
+                        ) : filtered.length ? (
                             filtered.map((r) => (
                                 <TableRow key={r.id} hover>
                                     <TableCell>{r.name}</TableCell>
@@ -179,9 +310,31 @@ export default function HostelConfigPage() {
                                         <Stack direction="row" spacing={1} alignItems="center">
                                             <Switch
                                                 checked={r.isActive}
-                                                onChange={(e) =>
-                                                    setRows(prev => prev.map(x => x.id === r.id ? { ...x, isActive: e.target.checked } : x))
-                                                }
+                                                onChange={async (e) => {
+                                                    const newVal = e.target.checked;
+                                                    // optimistic update
+                                                    setRows(prev => prev.map(x => x.id === r.id ? { ...x, isActive: newVal } : x));
+                                                    try {
+                                                        const payload = { hostelName: r.name, hostelCode: r.code, status: newVal ? "ACTIVE" : "INACTIVE" };
+                                                        const url = `${BaseUrl}/api/admin/hostels/${r.id}`;
+                                                        const res = await fetch(url, {
+                                                            method: "PUT",
+                                                            headers: authHeaders(),
+                                                            body: JSON.stringify(payload),
+                                                        });
+                                                        if (!res.ok) {
+                                                            let text = `${res.status}`;
+                                                            try { const j = await res.json(); text = j?.message || JSON.stringify(j); } catch { }
+                                                            throw new Error(`Update failed ${text}`);
+                                                        }
+                                                        setSnackBar("success", "Status updated");
+                                                    } catch (err: any) {
+                                                        console.error(err);
+                                                        setSnackBar("error", err.message || "Failed to update status");
+                                                        // revert
+                                                        setRows(prev => prev.map(x => x.id === r.id ? { ...x, isActive: !newVal } : x));
+                                                    }
+                                                }}
                                             />
                                             <Typography variant="caption" color="text.secondary">
                                                 {r.isActive ? "Active" : "Inactive"}
@@ -248,7 +401,7 @@ export default function HostelConfigPage() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={save}>
+                    <Button variant="contained" onClick={save} disabled={loading} startIcon={loading ? <CircularProgress size={16} /> : null}>
                         {editing ? "Save Changes" : "Create Hostel"}
                     </Button>
                 </DialogActions>
@@ -264,7 +417,7 @@ export default function HostelConfigPage() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setConfirm({ open: false, id: null })}>Cancel</Button>
-                    <Button color="error" variant="contained" onClick={doDelete}>Delete</Button>
+                    <Button color="error" variant="contained" onClick={doDelete} disabled={loading}>{loading ? <CircularProgress size={16} /> : "Delete"}</Button>
                 </DialogActions>
             </Dialog>
         </Card>

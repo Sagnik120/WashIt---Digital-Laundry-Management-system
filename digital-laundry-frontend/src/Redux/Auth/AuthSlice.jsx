@@ -1,5 +1,5 @@
 import { createSlice, combineReducers } from "@reduxjs/toolkit";
-import { loginFunction } from "../Actions/AuthUser";
+import { LoginFunction } from "../Actions/AuthUser";
 
 const initialState = {
   userDetail: {},
@@ -10,14 +10,14 @@ export let loggedInUserDetailsSlice = createSlice({
   initialState,
   reducers: {},
   extraReducers: (builder) => {
-    builder.addCase(loginFunction.pending, (state) => {
+    builder.addCase(LoginFunction.pending, (state) => {
       state.status = "loading";
     });
-    builder.addCase(loginFunction.fulfilled, (state, { payload }) => {
+    builder.addCase(LoginFunction.fulfilled, (state, { payload }) => {
       state.userDetail = payload?.data?.user;
       state.status = "success";
     });
-    builder.addCase(loginFunction.rejected, (state, { payload }) => {
+    builder.addCase(LoginFunction.rejected, (state, { payload }) => {
       state.userDetail = {};
       state.status = "failed";
     });

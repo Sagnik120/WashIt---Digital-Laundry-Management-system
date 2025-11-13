@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     Box,
     Card,
@@ -7,8 +7,6 @@ import {
     Typography,
     Stack,
     TextField,
-    Select,
-    MenuItem,
     Button,
     Table,
     TableHead,
@@ -18,136 +16,157 @@ import {
     Chip,
     IconButton,
     Collapse,
+    CircularProgress,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import { useDispatch } from "react-redux";
+import { OrderListForAdmin } from "@/Redux/Actions/AuthUser";
 
 // ---- Types
-type OrderStatus = "Pending" | "In Progress" | "Completed" | "Delivered" | "Cancelled";
+type OrderStatus = "Pending" | "In Progress" | "Completed" | "Delivered" | "Cancelled" | "QR Not Scanned" | "Unknown";
 
 type Student = {
-    laundryId: string;  // e.g., STU-101
-    name: string;
-    hostel: string;     // e.g., A-Block
+    laundryId: string; // unique laundry id from API (uniqueLaundryId)
+    name: string; // from student.fullName or fall back to laundryId
 };
 
 type Order = {
-    id: string;         // e.g., LDR-2025-0001
-    laundryId: string;
-    date: string;       // dd/mm/yyyy
-    items: { name: string; qty: number }[];
+    id: string; // e.g., ORD-...
+    laundryId: string; // uniqueLaundryId
+    date: string; // dd/mm/yyyy
+    rawDateIso?: string; // original ISO for sorting if needed
     status: OrderStatus;
 };
-
-// ---- Mock Data (replace with API)
-const HOSTELS = ["A-Block", "B-Block", "C-Block"];
-
-const STUDENTS: Student[] = [
-    { laundryId: "STU-101", name: "Vishal Singh", hostel: "A-Block" },
-    { laundryId: "STU-098", name: "Ritika Shah", hostel: "A-Block" },
-    { laundryId: "STU-102", name: "Anita Rao", hostel: "B-Block" },
-    { laundryId: "STU-110", name: "Rahul Shah", hostel: "B-Block" },
-    { laundryId: "STU-087", name: "Aman Joshi", hostel: "C-Block" },
-];
-
-const ORDERS: Order[] = [
-    {
-        id: "LDR-2025-0001",
-        laundryId: "STU-101",
-        date: "02/11/2025",
-        items: [{ name: "Shirt", qty: 3 }, { name: "Jeans", qty: 2 }],
-        status: "In Progress",
-    },
-    {
-        id: "LDR-2025-0006",
-        laundryId: "STU-101",
-        date: "05/11/2025",
-        items: [{ name: "Towel", qty: 2 }],
-        status: "Pending",
-    },
-    {
-        id: "LDR-2025-0003",
-        laundryId: "STU-098",
-        date: "03/11/2025",
-        items: [{ name: "Shirt", qty: 4 }, { name: "Shorts", qty: 3 }],
-        status: "Completed",
-    },
-    {
-        id: "LDR-2025-0002",
-        laundryId: "STU-102",
-        date: "03/11/2025",
-        items: [{ name: "Bed Sheet", qty: 2 }, { name: "Curtain", qty: 2 }],
-        status: "In Progress",
-    },
-    {
-        id: "LDR-2025-0005",
-        laundryId: "STU-110",
-        date: "04/11/2025",
-        items: [{ name: "Shirt", qty: 2 }, { name: "Socks", qty: 5 }],
-        status: "Pending",
-    },
-    {
-        id: "LDR-2025-0004",
-        laundryId: "STU-087",
-        date: "04/11/2025",
-        items: [{ name: "Jeans", qty: 1 }, { name: "Jacket", qty: 1 }],
-        status: "Delivered",
-    },
-];
 
 // ---- Status Chip helper
 const statusColor = (s: OrderStatus) =>
     s === "Pending" ? "warning" :
         s === "In Progress" ? "info" :
             s === "Completed" ? "success" :
-                s === "Delivered" ? "secondary" : "default";
+                s === "Delivered" ? "secondary" :
+                    s === "Cancelled" ? "default" :
+                        s === "QR Not Scanned" ? "error" : "default";
 
 export default function AdminOrdersLookupPage() {
-    // Form state
-    const [hostel, setHostel] = useState<string>("");
+    const dispatch = useDispatch();
+
+    // Form state (only laundryId now)
     const [laundryId, setLaundryId] = useState<string>("");
 
     // Submit + results
-    const [submitted, setSubmitted] = useState<{ hostel: string; laundryId?: string | null } | null>(null);
+    const [submitted, setSubmitted] = useState<{ laundryId?: string | null } | null>(null);
 
     // Expand state for grouped students
     const [expanded, setExpanded] = useState<Record<string, boolean>>({}); // key by laundryId
 
-    const handleSearch = () => {
-        if (!hostel) return; // require hostel
-        setSubmitted({ hostel, laundryId: laundryId.trim() ? laundryId.trim() : null });
-        setExpanded({}); // reset expands on new search
-    };
-
-    // Derived results
-    const results = useMemo(() => {
-        if (!submitted) return { mode: "none" as const, students: [] as Student[], ordersByStudent: {} as Record<string, Order[]> };
-
-        const { hostel: h, laundryId: lid } = submitted;
-        const studentsInHostel = STUDENTS.filter((s) => s.hostel === h);
-
-        if (lid) {
-            // Specific student view
-            const student = studentsInHostel.find((s) => s.laundryId.toLowerCase() === lid.toLowerCase());
-            const orders = student ? ORDERS.filter((o) => o.laundryId === student.laundryId) : [];
-            return {
-                mode: "single" as const,
-                students: student ? [student] : [],
-                ordersByStudent: student ? { [student.laundryId]: orders } : {},
-            };
-        }
-
-        // Hostel-wide grouped view
-        const ordersByStudent: Record<string, Order[]> = {};
-        studentsInHostel.forEach((s) => {
-            ordersByStudent[s.laundryId] = ORDERS.filter((o) => o.laundryId === s.laundryId);
-        });
-        return { mode: "group" as const, students: studentsInHostel, ordersByStudent };
-    }, [submitted]);
+    // Fetched data
+    const [fetchedOrders, setFetchedOrders] = useState<Order[]>([]);
+    const [fetchedStudents, setFetchedStudents] = useState<Student[]>([]);
+    const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
 
     const toggleExpand = (lid: string) =>
         setExpanded((prev) => ({ ...prev, [lid]: !prev[lid] }));
+
+    // Map API orderStatus (e.g., "PENDING", "COMPLETED") to OrderStatus
+    const mapStatus = (s?: string): OrderStatus => {
+        const v = (s ?? "").toString().toUpperCase();
+        // QR not scanned detection - cover various possible API values
+        if (v.includes("QR") && (v.includes("NOT") || v.includes("UNSCANNED") || v.includes("NOT_SCANNED") || v.includes("NOTSCANNED"))) return "QR Not Scanned";
+        if (v.includes("PENDING")) return "Pending";
+        if (v.includes("IN_PROGRESS") || v.includes("INPROGRESS")) return "In Progress";
+        if (v.includes("COMPLETED") || v.includes("COMPLETE")) return "Completed";
+        if (v.includes("DELIVERED")) return "Delivered";
+        if (v.includes("CANCEL")) return "Cancelled";
+        return "Unknown";
+    };
+
+    const isoToDDMMYYYY = (iso?: string) => {
+        if (!iso) return "";
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso;
+        const dd = String(d.getDate()).padStart(2, "0");
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const yyyy = d.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+    };
+
+    const handleSearch = async () => {
+        setSubmitted({ laundryId: laundryId.trim() ? laundryId.trim() : null });
+        setExpanded({});
+        // Build params - only uniqueLaundryId if provided (no hostelCode)
+        const params: Record<string, string> = {};
+        if (laundryId?.trim()) {
+            params.uniqueLaundryId = laundryId.trim();
+        }
+
+        setLoading(true);
+        setError(null);
+        try {
+            const res: any = await dispatch(OrderListForAdmin(params));
+            const body = res?.payload ?? res?.data ?? res ?? null;
+            const arr: any[] = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+
+            const mappedOrders: Order[] = arr.map((o: any) => ({
+                id: String(o.orderCode ?? o.id ?? ""),
+                laundryId: String(o.student?.uniqueLaundryId ?? ""),
+                date: isoToDDMMYYYY(o.orderDate ?? o.order_date),
+                rawDateIso: o.orderDate ?? o.order_date,
+                status: mapStatus(o.orderStatus ?? o.order_status),
+            }));
+
+            const studentsMap = new Map<string, Student>();
+            arr.forEach((o: any) => {
+                const lid = String(o.student?.uniqueLaundryId ?? "");
+                if (!lid) return;
+                if (!studentsMap.has(lid)) {
+                    const name = o.student?.fullName?.trim() ? String(o.student.fullName) : lid;
+                    studentsMap.set(lid, { laundryId: lid, name });
+                }
+            });
+
+            setFetchedOrders(mappedOrders);
+            setFetchedStudents(Array.from(studentsMap.values()));
+        } catch (err: any) {
+            console.error("OrderListForAdmin error:", err);
+            setError(err?.message ?? "Failed to fetch orders");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const results = useMemo(() => {
+        if (!submitted) return { mode: "none" as const, students: [] as Student[], ordersByStudent: {} as Record<string, Order[]> };
+        const { laundryId: lid } = submitted;
+
+        const ordersByStudent: Record<string, Order[]> = {};
+        fetchedOrders.forEach((o) => {
+            if (!ordersByStudent[o.laundryId]) ordersByStudent[o.laundryId] = [];
+            ordersByStudent[o.laundryId].push(o);
+        });
+
+        if (lid) {
+            const key = fetchedStudents.find((s) => s.laundryId.toLowerCase() === lid.toLowerCase())?.laundryId ?? lid;
+            const student = fetchedStudents.find((s) => s.laundryId.toLowerCase() === lid.toLowerCase());
+            const orders = ordersByStudent[key] ?? [];
+            return {
+                mode: "single" as const,
+                students: student ? [student] : (orders.length ? [{ laundryId: key, name: key }] : []),
+                ordersByStudent: student ? { [student.laundryId]: orders } : { [key]: orders },
+            };
+        }
+
+        const students = fetchedStudents.length ? fetchedStudents : Array.from(new Set(fetchedOrders.map((o) => o.laundryId))).map((lid) => ({ laundryId: lid, name: lid }));
+        students.forEach((s) => { if (!ordersByStudent[s.laundryId]) ordersByStudent[s.laundryId] = []; });
+
+        return { mode: "group" as const, students, ordersByStudent };
+    }, [submitted, fetchedOrders, fetchedStudents]);
+
+    useEffect(() => {
+        handleSearch();
+    }, [])
 
     return (
         <Box sx={{ p: 4, minHeight: "82vh", background: "linear-gradient(135deg,#e0f2fe,#f0fdfa)" }}>
@@ -155,11 +174,10 @@ export default function AdminOrdersLookupPage() {
                 🔎 Orders Lookup
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
-                Select a <b>Hostel</b> to view all students and their orders, or provide a <b>Laundry ID</b> to view a specific student's orders.
+                Provide a <b>Laundry ID</b> to view a specific student's orders, or leave it empty to fetch all orders.
             </Typography>
 
             <Card sx={{ borderRadius: 4, overflow: "hidden" }}>
-                {/* Header controls (right aligned) */}
                 <Box
                     sx={{
                         p: 2,
@@ -176,67 +194,65 @@ export default function AdminOrdersLookupPage() {
                     </Typography>
 
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                        <Select
-                            size="small"
-                            value={hostel}
-                            onChange={(e) => setHostel(e.target.value as string)}
-                            displayEmpty
-                            sx={{ minWidth: 200 }}
-                        >
-                            <MenuItem value="" disabled>
-                                Select Hostel
-                            </MenuItem>
-                            {HOSTELS.map((h) => (
-                                <MenuItem key={h} value={h}>
-                                    {h}
-                                </MenuItem>
-                            ))}
-                        </Select>
-
                         <TextField
                             size="small"
-                            placeholder="Laundry ID (optional) e.g., STU-101"
+                            placeholder="Laundry ID (optional) e.g., UL-m25cse021"
                             value={laundryId}
                             onChange={(e) => setLaundryId(e.target.value)}
-                            sx={{ minWidth: 240 }}
+                            sx={{ minWidth: 320 }}
                         />
 
                         <Button
                             variant="contained"
                             startIcon={<SearchIcon />}
                             onClick={handleSearch}
-                            disabled={!hostel}
+                            disabled={loading}
                         >
-                            Search
+                            {loading ? "Searching..." : "Search"}
                         </Button>
                     </Stack>
                 </Box>
 
-                {/* Results */}
                 <Paper elevation={0} sx={{ borderRadius: 0 }}>
-                    {/* If nothing searched yet */}
                     {!submitted && (
                         <Box sx={{ py: 6, textAlign: "center" }}>
                             <Typography variant="body2" color="text.secondary">
-                                Select a hostel (and optionally a Laundry ID), then click <b>Search</b>.
+                                Enter a Laundry ID (or leave empty) and click <b>Search</b>.
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {submitted && loading && (
+                        <Box sx={{ py: 6, textAlign: "center" }}>
+                            <CircularProgress />
+                            <Typography variant="body2" color="text.secondary" mt={1}>
+                                Loading orders...
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {submitted && error && !loading && (
+                        <Box sx={{ py: 6, textAlign: "center" }}>
+                            <Typography variant="body2" color="error">
+                                {error}
                             </Typography>
                         </Box>
                     )}
 
                     {/* Single student view */}
-                    {submitted && results.mode === "single" && (
+                    {submitted && !loading && results.mode === "single" && (
                         <>
                             {results.students.length === 0 ? (
                                 <Box sx={{ py: 6, textAlign: "center" }}>
                                     <Typography variant="body2" color="text.secondary">
-                                        No matching student found in <b>{submitted.hostel}</b> with Laundry ID <b>{submitted.laundryId}</b>.
+                                        No matching student found with Laundry ID <b>{submitted.laundryId}</b>.
                                     </Typography>
                                 </Box>
                             ) : (
                                 <>
                                     <Box sx={{ px: 2, pt: 2 }}>
                                         <Typography variant="subtitle1" fontWeight={700}>
-                                            {results.students[0].name} • {results.students[0].laundryId} • {results.students[0].hostel}
+                                            {results.students[0].name} • {results.students[0].laundryId}
                                         </Typography>
                                     </Box>
                                     <Table>
@@ -244,7 +260,6 @@ export default function AdminOrdersLookupPage() {
                                             <TableRow>
                                                 <TableCell>Order ID</TableCell>
                                                 <TableCell>Date</TableCell>
-                                                <TableCell>Items</TableCell>
                                                 <TableCell>Status</TableCell>
                                             </TableRow>
                                         </TableHead>
@@ -254,18 +269,13 @@ export default function AdminOrdersLookupPage() {
                                                     <TableCell>{o.id}</TableCell>
                                                     <TableCell>{o.date}</TableCell>
                                                     <TableCell>
-                                                        {o.items.map((it, i) => (
-                                                            <Chip key={i} label={`${it.name} x${it.qty}`} size="small" sx={{ mr: 0.5, mb: 0.5 }} />
-                                                        ))}
-                                                    </TableCell>
-                                                    <TableCell>
                                                         <Chip label={o.status} color={statusColor(o.status)} />
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
                                             {!(results.ordersByStudent[results.students[0].laundryId] || []).length && (
                                                 <TableRow>
-                                                    <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                                                    <TableCell colSpan={3} align="center" sx={{ py: 4 }}>
                                                         No orders found.
                                                     </TableCell>
                                                 </TableRow>
@@ -277,8 +287,8 @@ export default function AdminOrdersLookupPage() {
                         </>
                     )}
 
-                    {/* Grouped (hostel-wide) view */}
-                    {submitted && results.mode === "group" && (
+                    {/* Grouped (all students) view */}
+                    {submitted && !loading && results.mode === "group" && (
                         <>
                             <Table>
                                 <TableHead>
@@ -294,7 +304,7 @@ export default function AdminOrdersLookupPage() {
                                     {results.students.length ? (
                                         results.students.map((s) => {
                                             const orders = results.ordersByStudent[s.laundryId] || [];
-                                            const statusCounts = orders.reduce<Record<OrderStatus, number>>((acc, o) => {
+                                            const statusCounts = orders.reduce<Record<string, number>>((acc, o) => {
                                                 acc[o.status] = (acc[o.status] || 0) + 1;
                                                 return acc;
                                             }, {} as any);
@@ -306,7 +316,7 @@ export default function AdminOrdersLookupPage() {
                                                         <TableCell>{s.laundryId}</TableCell>
                                                         <TableCell>{orders.length}</TableCell>
                                                         <TableCell>
-                                                            {Object.entries(statusCounts).map(([st, ct]) => (
+                                                            {Object.entries(statusCounts).length ? Object.entries(statusCounts).map(([st, ct]) => (
                                                                 <Chip
                                                                     key={st}
                                                                     label={`${st}: ${ct}`}
@@ -314,8 +324,7 @@ export default function AdminOrdersLookupPage() {
                                                                     color={statusColor(st as OrderStatus)}
                                                                     sx={{ mr: 0.5, mb: 0.5 }}
                                                                 />
-                                                            ))}
-                                                            {!orders.length && <Typography variant="caption">—</Typography>}
+                                                            )) : <Typography variant="caption">—</Typography>}
                                                         </TableCell>
                                                         <TableCell align="right">
                                                             <IconButton onClick={() => toggleExpand(s.laundryId)}>
@@ -333,7 +342,6 @@ export default function AdminOrdersLookupPage() {
                                                                             <TableRow>
                                                                                 <TableCell>Order ID</TableCell>
                                                                                 <TableCell>Date</TableCell>
-                                                                                <TableCell>Items</TableCell>
                                                                                 <TableCell>Status</TableCell>
                                                                             </TableRow>
                                                                         </TableHead>
@@ -344,23 +352,13 @@ export default function AdminOrdersLookupPage() {
                                                                                         <TableCell>{o.id}</TableCell>
                                                                                         <TableCell>{o.date}</TableCell>
                                                                                         <TableCell>
-                                                                                            {o.items.map((it, i) => (
-                                                                                                <Chip
-                                                                                                    key={i}
-                                                                                                    label={`${it.name} x${it.qty}`}
-                                                                                                    size="small"
-                                                                                                    sx={{ mr: 0.5, mb: 0.5 }}
-                                                                                                />
-                                                                                            ))}
-                                                                                        </TableCell>
-                                                                                        <TableCell>
                                                                                             <Chip label={o.status} color={statusColor(o.status)} />
                                                                                         </TableCell>
                                                                                     </TableRow>
                                                                                 ))
                                                                             ) : (
                                                                                 <TableRow>
-                                                                                    <TableCell colSpan={4} align="center" sx={{ py: 2 }}>
+                                                                                    <TableCell colSpan={3} align="center" sx={{ py: 2 }}>
                                                                                         No orders for this student.
                                                                                     </TableCell>
                                                                                 </TableRow>
@@ -377,7 +375,7 @@ export default function AdminOrdersLookupPage() {
                                     ) : (
                                         <TableRow>
                                             <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
-                                                No students found in <b>{submitted.hostel}</b>.
+                                                No students/orders found.
                                             </TableCell>
                                         </TableRow>
                                     )}

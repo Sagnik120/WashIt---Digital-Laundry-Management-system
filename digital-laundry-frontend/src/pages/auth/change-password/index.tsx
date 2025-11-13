@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Typography, TextField, Button, Box, useTheme } from "@mui/material";
 import AuthWrapper from "@/Components/AuthLayout/AuthLayout";
 import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import { useRouter } from "next/navigation";
 import { useDispatch } from "react-redux";
+import { changePassword } from "@/Redux/Actions/AuthUser";
+import ErrorHandler from "@/lib/errorHandler";
 
 const ChangePassword = () => {
     const dispatch = useDispatch();
@@ -117,15 +119,42 @@ const ChangePassword = () => {
         return isValid;
     };
 
-    const handleChangePassword = () => {
-        if (validate()) {
-            // Proceed with login
-            setSnackBar("success", "Password changed successfully!");
-            // Add your login API call here
-        } else {
-            setSnackBar("error", "Please fix the errors before submitting");
+    const handleChangePassword = async () => {
+        try {
+            if (validate()) {
+                setFullPageLoader(true);
+                const body = {
+                    "oldPassword": data?.oldPassword,
+                    "newPassword": data?.newPassword
+                };
+
+                const res: any = await dispatch(changePassword(body));
+                const error = ErrorHandler(res, setSnackBar);
+
+                if (!error) {
+                    setSnackBar('error', res?.payload?.data?.message || 'somthing wrong!');
+                    setFullPageLoader(false);
+                    return;
+                }
+                router.push('/auth/login');
+                setSnackBar("success", "Password changed successfully!");
+            } else {
+                setSnackBar("error", "Please fix the errors before submitting");
+            }
+        } catch (error: any) {
+            console.error('Login error:', error);
+            setSnackBar('error', error?.message || 'Something went wrong during login');
+            setFullPageLoader(false);
+        } finally {
+            setFullPageLoader(false);
         }
     };
+
+    useEffect(() => {
+        let user: any = localStorage.getItem("userData")
+        let Data = JSON.parse(user);
+        setData({ ...data, email: Data?.email })
+    }, [])
 
     return (
         <AuthWrapper>
@@ -149,6 +178,7 @@ const ChangePassword = () => {
                     variant="outlined"
                     margin="normal"
                     required
+                    disabled
                     InputLabelProps={{ style: { color: "white" } }}
                     InputProps={{
                         style: {

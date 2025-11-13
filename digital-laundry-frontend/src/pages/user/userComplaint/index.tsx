@@ -14,28 +14,27 @@ import {
     DialogContent,
     TextField,
     DialogActions,
-    CardContent,
     Chip,
     List,
     ListItem,
     ListItemAvatar,
     ListItemText,
     Badge,
+    CircularProgress,
 } from "@mui/material";
 import {
-    LocalLaundryService,
-    CheckCircle,
-    HourglassBottom,
-    AddCircle,
     PhotoCamera,
 } from "@mui/icons-material";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CountUp from "react-countup";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import { useDispatch } from "react-redux";
+import { complaintsList, OrdersList } from "@/Redux/Actions/AuthUser";
+import ErrorHandler from "@/lib/errorHandler";
+import { BaseUrl } from "@/ApiSetUp/AuthApi";
 
 type ComplaintStatus = "Open" | "In Review" | "Resolved" | "Closed";
 
@@ -46,16 +45,19 @@ interface Complaint {
     description: string;
     category: "Maintenance" | "Hostel" | "Mess" | "Academics" | "Other";
     status: ComplaintStatus;
-    created_at: string; // ISO
-    updated_at: string; // ISO
+    created_at: string; 
+    updated_at: string; 
     attachment?: string;
-    order_id?: string; // linked order (required in your flow)
+    order_id?: string; 
+    order_internal_id?: string; 
 }
 
 interface PendingOrder {
-    order_id: string;
+    id: string; 
+    order_id: string; 
     submission_date: string;
     items_count: number;
+    isComplaintRaised: boolean;
 }
 
 export default function StudentDashboard() {
@@ -87,84 +89,43 @@ export default function StudentDashboard() {
         },
     };
 
-    // 🔹 Pending orders from History (mock; plug in your API later)
-    const [pendingOrders] = useState<PendingOrder[]>([
-        {
-            order_id: "LDR-2025-0007",
-            submission_date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-            items_count: 3,
-        },
-        {
-            order_id: "LDR-2025-0012",
-            submission_date: new Date(Date.now() - 1000 * 60 * 60 * 28).toISOString(),
-            items_count: 5,
-        },
-    ]);
+    const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+    const [loadingPending, setLoadingPending] = useState(false);
 
-    // existing complaints (mock)
-    const [complaints, setComplaints] = useState<Complaint[]>([
-        {
-            id: "c1",
-            ticket_no: "CMP-24001",
-            title: "Issue with order LDR-2025-0007",
-            description: "Water leakage in bathroom after laundry delivery.",
-            category: "Maintenance",
-            status: "Open",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            order_id: "LDR-2025-0007",
-        },
-        {
-            id: "c2",
-            ticket_no: "CMP-24002",
-            title: "WiFi not working on 2nd floor",
-            description: "Frequent disconnects since last night.",
-            category: "Hostel",
-            status: "In Review",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-        },
-        {
-            id: "c3",
-            ticket_no: "CMP-24003",
-            title: "Quality of lunch (mess)",
-            description: "Undercooked rice observed for the past 2 days.",
-            category: "Mess",
-            status: "Resolved",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-        },
-        {
-            id: "c4",
-            ticket_no: "CMP-24004",
-            title: "Issue with order LDR-2025-0012",
-            description: "Some clothes came back damp.",
-            category: "Maintenance",
-            status: "Closed",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            order_id: "LDR-2025-0012",
-        },
-    ]);
+    const [complaints, setComplaints] = useState<Complaint[]>([]);
+    const [loadingComplaints, setLoadingComplaints] = useState(false);
 
-    // filters & search
+    const [inFlight, setInFlight] = useState<Record<string, boolean>>({});
+
     const [statusFilter, setStatusFilter] = useState<"All" | ComplaintStatus>("All");
     const [search, setSearch] = useState("");
 
-    // raise-complaint dialog state — order is REQUIRED and LOCKED
     const [openRaise, setOpenRaise] = useState(false);
-    const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+    const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null); 
+    const [selectedOrderDisplayId, setSelectedOrderDisplayId] = useState<string | null>(null); 
     const [description, setDescription] = useState("");
     const [attachmentPreview, setAttachmentPreview] = useState<string | undefined>(undefined);
 
+    const [submittingComplaint, setSubmittingComplaint] = useState(false);
+
     const [viewOpen, setViewOpen] = useState(false);
     const [viewCmp, setViewCmp] = useState<Complaint | null>(null);
+
+    // helpers for auth header
+    function getAuthToken() {
+        return localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+    }
+    function authHeaders() {
+        const token = getAuthToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        return headers;
+    }
 
     const openView = (c: Complaint) => {
         setViewCmp(c);
         setViewOpen(true);
     };
-
     const closeView = () => {
         setViewOpen(false);
         setViewCmp(null);
@@ -180,16 +141,125 @@ export default function StudentDashboard() {
         }
     };
 
-    // open dialog prefilled with selected order; order cannot be changed
-    const raiseComplaintForOrder = (order_id: string) => {
-        setSelectedOrderId(order_id);
-        setDescription("");
-        setAttachmentPreview(undefined);
-        setOpenRaise(true);
+    const loadComplaints = async () => {
+        setLoadingComplaints(true);
+        setFullPageLoader(true);
+        try {
+            const payload: any = { page: 1, pageSize: 100 };
+            const res: any = await dispatch(complaintsList(payload) as any);
+            const ok = ErrorHandler(res, setSnackBar);
+            if (!ok) {
+                setComplaints([]);
+                return;
+            }
+
+            const body = res?.payload ?? res?.data ?? res;
+            const arr = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : body?.complaints ?? [];
+
+            const mapped: Complaint[] = (arr || []).map((c: any) => {
+                const orderObj = c.order ?? c.orderDetails ?? null;
+                const displayOrderCode = orderObj?.orderCode ?? c.orderCode ?? null;
+                const internalOrderId = c.orderId ?? orderObj?.id ?? null;
+                // normalize status
+                const statusRaw = (c.complaintStatus ?? c.status ?? "OPEN").toString().toUpperCase();
+                let status: ComplaintStatus = "Open";
+                if (statusRaw === "IN_REVIEW") status = "In Review";
+                else if (statusRaw === "RESOLVED") status = "Resolved";
+                else if (statusRaw === "CLOSED") status = "Closed";
+
+                const img = Array.isArray(c.images) && c.images.length > 0 ? c.images[0]?.imageUrl ?? undefined : undefined;
+
+                return {
+                    id: c.id,
+                    ticket_no: c.ticket_no ?? c.ticketNo ?? `CMP-${String((c.id ?? "").slice(0, 8)).toUpperCase()}`,
+                    title: c.title ?? `Issue with order ${displayOrderCode ?? internalOrderId ?? c.orderId}`,
+                    description: c.description ?? c.desc ?? "",
+                    category: c.category ?? "Maintenance",
+                    status,
+                    created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
+                    updated_at: c.updatedAt ?? c.updated_at ?? new Date().toISOString(),
+                    attachment: img,
+                    order_id: displayOrderCode ?? undefined,
+                    order_internal_id: internalOrderId ?? undefined,
+                };
+            });
+
+            setComplaints(mapped);
+        } catch (err: any) {
+            console.error("loadComplaints error:", err);
+            setComplaints([]);
+            setSnackBar("error", err?.message ?? "Failed to load complaints");
+        } finally {
+            setLoadingComplaints(false);
+            setFullPageLoader(false);
+        }
     };
 
-    // create complaint (status always "Open", order locked, title auto-generated)
-    const createComplaint = () => {
+    const loadPendingOrders = async () => {
+        setLoadingPending(true);
+        setFullPageLoader(true);
+        try {
+            const payload: any = { status: "PENDING", page: 1, pageSize: 50 };
+            const res: any = await dispatch(OrdersList(payload) as any);
+            const ok = ErrorHandler(res, setSnackBar);
+            if (!ok) {
+                setPendingOrders([]);
+                return;
+            }
+
+            const body = res?.payload ?? res?.data ?? res;
+            const arr = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : body?.orders ?? [];
+
+            const mapped: PendingOrder[] = (arr || []).map((o: any) => {
+                const displayCode = o.orderCode ?? o.order_code ?? o.order_id ?? o.id;
+                const internalId = o.id ?? o.orderId ?? o.order_id;
+                const itemsCount = Array.isArray(o.items) ? o.items.reduce((acc: number, it: any) => acc + (Number(it.quantity) || 0), 0) : 0;
+                const isRaised = complaints.some((c) => {
+                    return c.order_internal_id === internalId || c.order_id === displayCode || c.order_internal_id === o.id;
+                }) || (o?.complaints && o.complaints.length > 0);
+
+                return {
+                    id: internalId,
+                    order_id: displayCode,
+                    submission_date: o.orderDate ?? o.createdAt ?? new Date().toISOString(),
+                    items_count: itemsCount,
+                    isComplaintRaised: Boolean(isRaised),
+                };
+            });
+
+            setPendingOrders(mapped);
+        } catch (err: any) {
+            console.error("loadPendingOrders error:", err);
+            setPendingOrders([]);
+            setSnackBar("error", err?.message ?? "Failed to load pending orders");
+        } finally {
+            setLoadingPending(false);
+            setFullPageLoader(false);
+        }
+    };
+
+    useEffect(() => {
+        (async () => {
+            await loadComplaints();
+            await loadPendingOrders();
+        })();
+    }, []);
+
+    useEffect(() => {
+        if (pendingOrders.length === 0 || complaints.length === 0) return;
+        setPendingOrders((prev) =>
+            prev.map((o) => {
+                const raised = complaints.some((c) => c.order_internal_id === o.id || c.order_id === o.order_id);
+                return { ...o, isComplaintRaised: raised };
+            })
+        );
+    }, [complaints]); 
+
+    const hasComplaintForOrder = (internalOrderId: string, displayOrderId?: string) => {
+        return complaints.some((c) => c.order_internal_id === internalOrderId || (displayOrderId && c.order_id === displayOrderId));
+    };
+
+    const createComplaint = async () => {
         if (!selectedOrderId) {
             setSnackBar("warning", "Please select an order from Pending Orders.");
             return;
@@ -199,61 +269,133 @@ export default function StudentDashboard() {
             return;
         }
 
-        const id = (globalThis as any)?.crypto?.randomUUID?.() ?? `cmp_${Date.now()}`;
-        const now = new Date().toISOString();
-        const ticket_no = `CMP-${String(complaints.length + 1).padStart(5, "0")}`;
+        setSubmittingComplaint(true);
+        setFullPageLoader(true);
 
-        const newC: Complaint = {
-            id,
-            ticket_no,
-            title: `Issue with order ${selectedOrderId}`, // auto
-            description: description.trim(),
-            category: "Maintenance", // default; backend can ignore or infer
-            status: "Open", // ALWAYS Open
-            created_at: now,
-            updated_at: now,
-            attachment: attachmentPreview,
-            order_id: selectedOrderId,
-        };
-        setComplaints((prev) => [newC, ...prev]);
-        setOpenRaise(false);
-        setSnackBar("success", "Complaint raised successfully.");
-    };
+        try {
+            const createUrl = `${BaseUrl}/api/complaints/${encodeURIComponent(selectedOrderId)}`;
+            const createRes = await fetch(createUrl, {
+                method: "POST",
+                headers: authHeaders(),
+                body: JSON.stringify({ description: description.trim() }),
+            });
 
-    // ✅ allow only Resolved -> Closed transition
-    const markAsClosed = (id: string) => {
-        let changed = false;
-        const nowIso = new Date().toISOString();
+            let createJson: any = null;
+            try { createJson = await createRes.json(); } catch { createJson = null; }
 
-        setComplaints((prev) =>
-            prev.map((c) => {
-                if (c.id === id && c.status === "Resolved") {
-                    changed = true;
-                    return { ...c, status: "Closed", updated_at: nowIso };
-                }
-                return c;
-            })
-        );
-
-        // keep dialog in sync if it's showing the same complaint
-        setViewCmp((v) => {
-            if (v && v.id === id && v.status === "Resolved") {
-                return { ...v, status: "Closed", updated_at: nowIso };
+            if (!createRes.ok) {
+                const msg = createJson?.message ?? `Failed to raise complaint (${createRes.status})`;
+                setSnackBar("error", msg);
+                return;
             }
-            return v;
-        });
 
-        if (changed) {
-            setSnackBar("success", "Complaint marked as Closed.");
-        } else {
-            setSnackBar("warning", "Only complaints in Resolved status can be closed.");
+            await loadComplaints();
+
+            const createdComplaint = createJson?.data ?? createJson?.complaint ?? createJson ?? null;
+            const complaintId = createdComplaint?.id ?? createdComplaint?.complaintId ?? createdComplaint?.complaint_id ?? null;
+
+            if (attachmentPreview && (complaintId || createdComplaint?.id)) {
+                const targetId = complaintId ?? createdComplaint?.id;
+                const imagesUrl = `${BaseUrl}/api/complaints/${encodeURIComponent(targetId)}/images`;
+                try {
+                    const imgRes = await fetch(imagesUrl, {
+                        method: "POST",
+                        headers: authHeaders(),
+                        body: JSON.stringify({ images: [attachmentPreview] }),
+                    });
+                    let imgJson: any = null;
+                    try { imgJson = await imgRes.json(); } catch { imgJson = null; }
+
+                    if (!imgRes.ok) {
+                        const msg = imgJson?.message ?? `Image upload failed (${imgRes.status})`;
+                        setSnackBar("warning", msg);
+                    } else {
+                        await loadComplaints();
+                    }
+                } catch (imgErr: any) {
+                    console.error("Image upload error:", imgErr);
+                    setSnackBar("warning", "Complaint created but image upload failed.");
+                }
+            }
+
+            await loadPendingOrders();
+
+            setOpenRaise(false);
+            setSelectedOrderId(null);
+            setSelectedOrderDisplayId(null);
+            setDescription("");
+            setAttachmentPreview(undefined);
+            setSnackBar("success", (createJson?.message ?? "Complaint raised successfully."));
+        } catch (err: any) {
+            console.error("createComplaint error:", err);
+            setSnackBar("error", err?.message ?? "Failed to raise complaint.");
+        } finally {
+            setSubmittingComplaint(false);
+            setFullPageLoader(false);
         }
     };
 
-    // derived: filtered complaints
+    const closeComplaintOnServer = async (complaintId: string) => {
+        setInFlight((p) => ({ ...p, [complaintId]: true }));
+        setFullPageLoader(true);
+        try {
+            const url = `${BaseUrl}/api/complaints/${encodeURIComponent(complaintId)}/close`;
+            const res = await fetch(url, {
+                method: "POST",
+                headers: authHeaders(),
+                body: JSON.stringify({}), 
+            });
+            let json: any = null;
+            try { json = await res.json(); } catch { json = null; }
+
+            if (!res.ok) {
+                const msg = json?.message ?? `Failed to close complaint (${res.status})`;
+                setSnackBar("error", msg);
+                return { ok: false, json };
+            }
+
+            setSnackBar("success", json?.message ?? "Complaint closed.");
+            return { ok: true, json };
+        } catch (err: any) {
+            console.error("closeComplaintOnServer error:", err);
+            setSnackBar("error", err?.message ?? "Network error while closing complaint.");
+            return { ok: false, err };
+        } finally {
+            setInFlight((p) => {
+                const next = { ...p };
+                delete next[complaintId];
+                return next;
+            });
+            setFullPageLoader(false);
+        }
+    };
+
+    const markAsClosed = async (id: string) => {
+        const target = complaints.find((c) => c.id === id);
+        if (!target) {
+            setSnackBar("error", "Complaint not found.");
+            return;
+        }
+        if (target.status !== "Resolved") {
+            setSnackBar("warning", "Only complaints in Resolved status can be closed.");
+            return;
+        }
+
+        const res = await closeComplaintOnServer(id);
+        if (!res.ok) return;
+
+        const returned = res.json?.data ?? res.json?.complaint ?? res.json ?? null;
+        if (returned && (returned.id || returned.complaintId)) {
+            await loadComplaints();
+        } else {
+            const nowIso = new Date().toISOString();
+            setComplaints((prev) => prev.map((c) => (c.id === id ? { ...c, status: "Closed", updated_at: nowIso } : c)));
+            setViewCmp((v) => (v && v.id === id ? { ...v, status: "Closed", updated_at: nowIso } : v));
+        }
+    };
+
     const filteredComplaints = useMemo(() => {
-        const base =
-            statusFilter === "All" ? complaints : complaints.filter((c) => c.status === statusFilter);
+        const base = statusFilter === "All" ? complaints : complaints.filter((c) => c.status === statusFilter);
         if (!search.trim()) return base;
         const q = search.toLowerCase();
         return base.filter(
@@ -274,12 +416,18 @@ export default function StudentDashboard() {
                 acc[c.status] = (acc[c.status] || 0) + 1;
                 return acc;
             },
-            { total: 0, Open: 0, "In Review": 0, Resolved: 0, Closed: 0 } as Record<
-                "total" | ComplaintStatus,
-                number
-            >
+            { total: 0, Open: 0, "In Review": 0, Resolved: 0, Closed: 0 } as Record<"total" | ComplaintStatus, number>
         );
     }, [complaints]);
+
+    const raiseComplaintForOrder = (internalId: string) => {
+        const po = pendingOrders.find((p) => p.id === internalId) ?? pendingOrders.find((p) => p.order_id === internalId);
+        setSelectedOrderId(internalId);
+        setSelectedOrderDisplayId(po?.order_id ?? null);
+        setDescription("");
+        setAttachmentPreview(undefined);
+        setOpenRaise(true);
+    };
 
     return (
         <>
@@ -331,69 +479,88 @@ export default function StudentDashboard() {
                                 />
                             </Box>
 
-                            {/* 🔸 Pending Orders (must choose here) */}
-                            {pendingOrders.length > 0 && (
-                                <Card
-                                    variant="outlined"
-                                    sx={{
-                                        borderRadius: 4,
-                                        p: 2,
-                                        mb: 2.5,
-                                        borderColor: "#e5e7eb",
-                                        background: "linear-gradient(180deg,#ffffff,#fbfdff)",
-                                    }}
-                                >
-                                    <Typography variant="subtitle1" fontWeight={700} mb={1}>
-                                        Pending Orders
-                                    </Typography>
+                            {/* 🔸 Pending Orders (from API) */}
+                            <Card
+                                variant="outlined"
+                                sx={{
+                                    borderRadius: 4,
+                                    p: 2,
+                                    mb: 2.5,
+                                    borderColor: "#e5e7eb",
+                                    background: "linear-gradient(180deg,#ffffff,#fbfdff)",
+                                }}
+                            >
+                                <Typography variant="subtitle1" fontWeight={700} mb={1}>
+                                    Pending Orders
+                                </Typography>
+
+                                {loadingPending ? (
+                                    <Box sx={{ display: "grid", placeItems: "center", py: 6 }}>
+                                        <CircularProgress />
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Loading pending orders…</Typography>
+                                    </Box>
+                                ) : pendingOrders.length === 0 ? (
+                                    <Box py={4} textAlign="center">
+                                        <Typography variant="body2" color="text.secondary">No pending orders found.</Typography>
+                                    </Box>
+                                ) : (
                                     <Grid container spacing={2}>
-                                        {pendingOrders.map((o) => (
-                                            <Grid item xs={12} md={6} key={o.order_id}>
-                                                <Card
-                                                    sx={{
-                                                        p: 2,
-                                                        borderRadius: 3,
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "space-between",
-                                                        border: "1px solid #e5e7eb",
-                                                    }}
-                                                >
-                                                    <Stack spacing={0.5}>
-                                                        <Typography variant="body1" fontWeight={700}>
-                                                            {o.order_id}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Date: {new Date(o.submission_date).toLocaleString()} • Items: {o.items_count}
-                                                        </Typography>
-                                                    </Stack>
-                                                    <Button
-                                                        size="small"
-                                                        variant="contained"
-                                                        onClick={() => raiseComplaintForOrder(o.order_id)}
+                                        {pendingOrders.map((o) => {
+                                            const disabled = o?.isComplaintRaised;
+                                            return (
+                                                <Grid item xs={12} md={6} key={o.id}>
+                                                    <Card
                                                         sx={{
-                                                            borderRadius: 2,
-                                                            background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
+                                                            p: 2,
+                                                            borderRadius: 3,
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "space-between",
+                                                            border: "1px solid #e5e7eb",
                                                         }}
                                                     >
-                                                        Raise Complaint
-                                                    </Button>
-                                                </Card>
-                                            </Grid>
-                                        ))}
+                                                        <Stack spacing={0.5}>
+                                                            <Typography variant="body1" fontWeight={700}>
+                                                                {o.order_id}
+                                                            </Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                Date: {new Date(o.submission_date).toLocaleString()} • Items: {o.items_count}
+                                                            </Typography>
+                                                        </Stack>
+                                                        <Button
+                                                            size="small"
+                                                            variant="contained"
+                                                            onClick={() => raiseComplaintForOrder(o.id)}
+                                                            sx={{
+                                                                borderRadius: 2,
+                                                                background: disabled ? "#9ca3af" : "linear-gradient(135deg,#2563eb,#1d4ed8)",
+                                                                "&:hover": {
+                                                                    background: disabled ? "#9ca3af" : "linear-gradient(135deg,#1e40af,#1e3a8a)",
+                                                                },
+                                                            }}
+                                                            disabled={disabled}
+                                                        >
+                                                            {disabled ? "Complaint Raised" : "Raise Complaint"}
+                                                        </Button>
+                                                    </Card>
+                                                </Grid>
+                                            );
+                                        })}
                                     </Grid>
-                                </Card>
-                            )}
+                                )}
+                            </Card>
 
                             {/* Status Counters */}
                             <Grid container spacing={2} mb={2}>
-                                {([
-                                    { label: "All", value: "All", color: "#64748b", count: complaintCounts.total },
-                                    { label: "Open", value: "Open", color: BRAND.open, count: complaintCounts["Open"] },
-                                    { label: "In Review", value: "In Review", color: BRAND.review, count: complaintCounts["In Review"] },
-                                    { label: "Resolved", value: "Resolved", color: BRAND.resolved, count: complaintCounts["Resolved"] },
-                                    { label: "Closed", value: "Closed", color: BRAND.closed, count: complaintCounts["Closed"] },
-                                ] as const).map((f) => (
+                                {(
+                                    [
+                                        { label: "All", value: "All", color: "#64748b", count: complaintCounts.total },
+                                        { label: "Open", value: "Open", color: BRAND.open, count: complaintCounts["Open"] },
+                                        { label: "In Review", value: "In Review", color: BRAND.review, count: complaintCounts["In Review"] },
+                                        { label: "Resolved", value: "Resolved", color: BRAND.resolved, count: complaintCounts["Resolved"] },
+                                        { label: "Closed", value: "Closed", color: BRAND.closed, count: complaintCounts["Closed"] },
+                                    ] as const
+                                ).map((f) => (
                                     <Grid item xs={6} sm={12 / 5} key={f.value as string}>
                                         <Card
                                             onClick={() => setStatusFilter(f.value as any)}
@@ -453,9 +620,7 @@ export default function StudentDashboard() {
                                             }}
                                             secondaryAction={
                                                 <Stack direction="row" spacing={1} alignItems="center">
-                                                    {c.order_id && (
-                                                        <Chip size="small" variant="outlined" label={c.order_id} sx={{ fontWeight: 600 }} />
-                                                    )}
+                                                    {c.order_id && <Chip size="small" variant="outlined" label={c.order_id} sx={{ fontWeight: 600 }} />}
                                                     <Chip
                                                         size="small"
                                                         label={c.status}
@@ -465,20 +630,23 @@ export default function StudentDashboard() {
                                                             fontWeight: 700,
                                                         }}
                                                     />
-                                                    {/* 👇 Only show when the complaint is Resolved */}
                                                     {c.status === "Resolved" && (
                                                         <Tooltip title="Change status to Closed">
-                                                            <Button
-                                                                size="small"
-                                                                variant="outlined"
-                                                                onClick={() => markAsClosed(c.id)}
-                                                            >
-                                                                Mark as Closed
-                                                            </Button>
+                                                            <span>
+                                                                <Button
+                                                                    size="small"
+                                                                    variant="outlined"
+                                                                    onClick={() => markAsClosed(c.id)}
+                                                                    disabled={Boolean(inFlight[c.id])}
+                                                                    startIcon={inFlight[c.id] ? undefined : undefined}
+                                                                >
+                                                                    {inFlight[c.id] ? <CircularProgress size={16} /> : "Mark as Closed"}
+                                                                </Button>
+                                                            </span>
                                                         </Tooltip>
                                                     )}
                                                     <Tooltip title="View details">
-                                                        <IconButton onClick={() => openView(c)}>
+                                                        <IconButton onClick={() => openView(c)} disabled={Boolean(inFlight[c.id])}>
                                                             <VisibilityIcon />
                                                         </IconButton>
                                                     </Tooltip>
@@ -536,7 +704,7 @@ export default function StudentDashboard() {
                         {/* Order is preselected & locked */}
                         <Stack direction="row" spacing={1} alignItems="center">
                             <Typography variant="subtitle2" color="text.secondary">Order</Typography>
-                            <Chip color="primary" variant="outlined" label={selectedOrderId} />
+                            <Chip color="primary" variant="outlined" label={selectedOrderDisplayId ?? selectedOrderId} />
                             <Chip size="small" label="Open" sx={{ ml: "auto", background: BRAND.chipBg().Open, color: BRAND.color().Open, fontWeight: 700 }} />
                         </Stack>
 
@@ -568,8 +736,10 @@ export default function StudentDashboard() {
                     </Stack>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setOpenRaise(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={createComplaint}>Submit</Button>
+                    <Button onClick={() => setOpenRaise(false)} disabled={submittingComplaint}>Cancel</Button>
+                    <Button variant="contained" onClick={createComplaint} disabled={submittingComplaint}>
+                        {submittingComplaint ? <CircularProgress size={18} /> : "Submit"}
+                    </Button>
                 </DialogActions>
             </Dialog>
 
@@ -583,12 +753,7 @@ export default function StudentDashboard() {
                             <Typography variant="subtitle1" fontWeight={700}>
                                 {viewCmp?.title}
                             </Typography>
-                            <Chip
-                                size="small"
-                                label={viewCmp?.ticket_no}
-                                variant="outlined"
-                                sx={{ fontWeight: 600 }}
-                            />
+                            <Chip size="small" label={viewCmp?.ticket_no} variant="outlined" sx={{ fontWeight: 600 }} />
                         </Stack>
 
                         {/* Status + Order */}
@@ -611,71 +776,43 @@ export default function StudentDashboard() {
                             {viewCmp?.created_at && (
                                 <Typography variant="caption" color="text.secondary">
                                     Created: {new Date(viewCmp.created_at).toLocaleString()}
-                                    {viewCmp?.updated_at &&
-                                        ` • Updated: ${new Date(viewCmp.updated_at).toLocaleString()}`}
+                                    {viewCmp?.updated_at && ` • Updated: ${new Date(viewCmp.updated_at).toLocaleString()}`}
                                 </Typography>
                             )}
                         </Stack>
 
                         {/* Description */}
-                        <Box
-                            sx={{
-                                p: 2,
-                                borderRadius: 2,
-                                bgcolor: "#f8fafc",
-                                border: "1px solid #e5e7eb",
-                                whiteSpace: "pre-wrap",
-                            }}
-                        >
-                            <Typography variant="subtitle2" gutterBottom>
-                                Description
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                {viewCmp?.description || "—"}
-                            </Typography>
+                        <Box sx={{ p: 2, borderRadius: 2, bgcolor: "#f8fafc", border: "1px solid #e5e7eb", whiteSpace: "pre-wrap" }}>
+                            <Typography variant="subtitle2" gutterBottom>Description</Typography>
+                            <Typography variant="body2" color="text.secondary">{viewCmp?.description || "—"}</Typography>
                         </Box>
 
                         {/* Attachment (if any) */}
                         {viewCmp?.attachment && (
                             <Box>
-                                <Typography variant="subtitle2" gutterBottom>
-                                    Attachment
-                                </Typography>
-                                <Box
-                                    sx={{
-                                        p: 1,
-                                        borderRadius: 2,
-                                        border: "1px solid #e5e7eb",
-                                        display: "inline-block",
-                                        bgcolor: "#fff",
-                                    }}
-                                >
+                                <Typography variant="subtitle2" gutterBottom>Attachment</Typography>
+                                <Box sx={{ p: 1, borderRadius: 2, border: "1px solid #e5e7eb", display: "inline-block", bgcolor: "#fff" }}>
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img
-                                        src={viewCmp.attachment}
-                                        alt="Complaint attachment"
-                                        style={{ maxWidth: "100%", borderRadius: 8, display: "block" }}
-                                    />
+                                    <img src={viewCmp.attachment} alt="Complaint attachment" style={{ maxWidth: "100%", borderRadius: 8, display: "block" }} />
                                 </Box>
                             </Box>
                         )}
                     </Stack>
                 </DialogContent>
                 <DialogActions>
-                    {/* 👇 Only show when current complaint is Resolved */}
                     {viewCmp?.status === "Resolved" && (
                         <Button
                             variant="contained"
                             color="primary"
                             onClick={() => viewCmp && markAsClosed(viewCmp.id)}
+                            disabled={Boolean(inFlight[viewCmp?.id ?? ""])}
                         >
-                            Mark as Closed
+                            {inFlight[viewCmp?.id ?? ""] ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : "Mark as Closed"}
                         </Button>
                     )}
                     <Button onClick={closeView}>Close</Button>
                 </DialogActions>
             </Dialog>
-
         </>
     );
 }

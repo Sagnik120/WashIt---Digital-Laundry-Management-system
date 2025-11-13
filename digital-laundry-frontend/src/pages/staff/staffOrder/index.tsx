@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
     Box,
     Typography,
@@ -13,102 +13,140 @@ import {
     Chip,
     Button,
     TextField,
-    Select,
-    MenuItem,
     Stack,
+    CircularProgress,
 } from "@mui/material";
+import { useDispatch } from "react-redux";
+import ErrorHandler from "@/lib/errorHandler";
+import { OrdersList } from "@/Redux/Actions/AuthUser";
+import useSnackBar from "@/Redux/hooks/useSnackBar";
+import usePageLoader from "@/Redux/hooks/usePageLoader";
+import { BaseUrl } from "@/ApiSetUp/AuthApi";
 
-type OrderItem = { name: string; qty: number };
+type OrderItem = { itemType: string; quantity: number; remark?: string };
 type OrderRow = {
     id: string;
-    user: string;   // Laundry ID
-    date: string;
-    hostel: string;
+    orderCode: string; // visible order code (ORD-...)
+    orderDate: string;
     items: OrderItem[];
-    status: "In Progress" | "Pending";
+    orderStatus: string;
 };
 
 export default function StaffOrderTable() {
-    const [orders, setOrders] = useState<OrderRow[]>([
-        {
-            id: "LDR-2025-0001",
-            user: "STU-101",
-            date: "02/11/2025",
-            hostel: "A-Block",
-            items: [
-                { name: "Shirt", qty: 3 },
-                { name: "Jeans", qty: 2 },
-                { name: "Towel", qty: 1 },
-            ],
-            status: "In Progress",
-        },
-        {
-            id: "LDR-2025-0002",
-            user: "STU-102",
-            date: "03/11/2025",
-            hostel: "B-Block",
-            items: [
-                { name: "Bed Sheet", qty: 2 },
-                { name: "Curtain", qty: 2 },
-            ],
-            status: "In Progress",
-        },
-        {
-            id: "LDR-2025-0003",
-            user: "STU-098",
-            date: "03/11/2025",
-            hostel: "A-Block",
-            items: [
-                { name: "Shirt", qty: 4 },
-                { name: "T-Shirt", qty: 2 },
-                { name: "Shorts", qty: 3 },
-            ],
-            status: "In Progress",
-        },
-        {
-            id: "LDR-2025-0004",
-            user: "STU-087",
-            date: "04/11/2025",
-            hostel: "C-Block",
-            items: [
-                { name: "Jeans", qty: 1 },
-                { name: "Jacket", qty: 1 },
-            ],
-            status: "In Progress",
-        },
-        {
-            id: "LDR-2025-0005",
-            user: "STU-110",
-            date: "04/11/2025",
-            hostel: "B-Block",
-            items: [
-                { name: "Shirt", qty: 2 },
-                { name: "Towel", qty: 2 },
-                { name: "Socks", qty: 5 },
-            ],
-            status: "In Progress",
-        },
-    ]);
+    const dispatch = useDispatch();
+    const { setSnackBar } = useSnackBar();
+    const setFullPageLoader = usePageLoader();
 
-    const [searchId, setSearchId] = useState("");
-    const [hostelFilter, setHostelFilter] = useState("All");
+    const [orders, setOrders] = useState<OrderRow[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [inFlight, setInFlight] = useState<Record<string, boolean>>({}); // track per-order requests
 
-    const uniqueHostels = useMemo(() => {
-        return Array.from(new Set(orders.map((o) => o.hostel))).sort();
-    }, [orders]);
+    const [search, setSearch] = useState("");
+
+    // auth helpers
+    function getAuthToken() {
+        return localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+    }
+    function authHeaders() {
+        const token = getAuthToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        return headers;
+    }
+
+    // Load orders from server
+    const loadOrders = async () => {
+        setLoading(true);
+        try {
+            const payload: any = { status: "IN_PROGRESS"};
+            const res: any = await dispatch(OrdersList(payload) as any);
+            const ok = ErrorHandler(res, setSnackBar);
+            if (!ok) {
+                setOrders([]);
+                return;
+            }
+
+            const body = res?.payload ?? res?.data ?? res;
+            const arr = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : body?.orders ?? [];
+
+            const mapped: OrderRow[] = (arr || []).map((o: any) => ({
+                id: o.id,
+                orderCode: o.orderCode || o.order_code || o.order_id || o.id,
+                orderDate: o.orderDate || o.createdAt || new Date().toISOString(),
+                items: Array.isArray(o.items)
+                    ? o.items.map((it: any) => ({ itemType: it.itemType || it.item_type || it.name, quantity: it.quantity, remark: it.remark }))
+                    : [],
+                orderStatus: o.orderStatus || o.status || "UNKNOWN",
+            }));
+
+            setOrders(mapped);
+        } catch (err: any) {
+            console.error(err);
+            setSnackBar("error", err?.message ?? "Failed to load orders");
+            setOrders([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadOrders();
+    }, []);
 
     const filteredOrders = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return orders;
         return orders.filter((o) => {
-            const idMatch = o.user.toLowerCase().includes(searchId.trim().toLowerCase());
-            const hostelMatch = hostelFilter === "All" ? true : o.hostel === hostelFilter;
-            return idMatch && hostelMatch;
+            const matchCode = o.orderCode?.toLowerCase().includes(q);
+            const matchItem = o.items.some((it) => String(it.itemType || "").toLowerCase().includes(q));
+            return matchCode || matchItem;
         });
-    }, [orders, searchId, hostelFilter]);
+    }, [orders, search]);
 
-    const markPending = (id: string) => {
-        setOrders((prev) =>
-            prev.map((o) => (o.id === id && o.status === "In Progress" ? { ...o, status: "Pending" } : o))
-        );
+    // Call the mark-pending API and update local state on success
+    const markPending = async (orderId: string) => {
+        if (!orderId) return;
+        // prevent duplicate requests
+        if (inFlight[orderId]) return;
+
+        setInFlight((p) => ({ ...p, [orderId]: true }));
+        setFullPageLoader(true);
+
+        try {
+            const url = `${BaseUrl}/api/qr/mark-pending/${orderId}`;
+            const res = await fetch(url, {
+                method: "POST", 
+                headers: authHeaders(),
+                body: JSON.stringify({}), 
+            });
+
+            let json: any = null;
+            try {
+                json = await res.json();
+            } catch {
+                json = null;
+            }
+
+            if (!res.ok) {
+                const msg = json?.message ?? `Failed (${res.status})`;
+                setSnackBar("error", msg);
+                console.warn("mark-pending failed:", json);
+            } else {
+                // setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, orderStatus: "PENDING" } : o)));
+                loadOrders();
+                setSnackBar("success", json?.message ?? "Order marked as Pending.");
+            }
+        } catch (err: any) {
+            console.error("markPending error:", err);
+            setSnackBar("error", err?.message ?? "Network error while marking pending.");
+        } finally {
+            setInFlight((p) => {
+                const next = { ...p };
+                delete next[orderId];
+                return next;
+            });
+            setFullPageLoader(false);
+        }
     };
 
     return (
@@ -121,8 +159,6 @@ export default function StaffOrderTable() {
             </Typography>
 
             <TableContainer component={Paper} sx={{ borderRadius: 3, boxShadow: 3 }}>
-
-                {/* 🔹 Filters Header Inside Container */}
                 <Box
                     sx={{
                         p: 2,
@@ -141,35 +177,20 @@ export default function StaffOrderTable() {
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                         <TextField
                             size="small"
-                            label="Search Laundry ID"
-                            placeholder="e.g., STU-101"
-                            value={searchId}
-                            onChange={(e) => setSearchId(e.target.value)}
-                            sx={{ minWidth: 180 }}
+                            label="Search Order code or item"
+                            placeholder="e.g., ORD-T7BU87QM or shirt"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            sx={{ minWidth: 240 }}
                         />
 
-                        <Select
-                            size="small"
-                            value={hostelFilter}
-                            onChange={(e) => setHostelFilter(e.target.value)}
-                            sx={{ minWidth: 150 }}
-                        >
-                            <MenuItem value="All">All Hostels</MenuItem>
-                            {uniqueHostels.map((h) => (
-                                <MenuItem key={h} value={h}>
-                                    {h}
-                                </MenuItem>
-                            ))}
-                        </Select>
-
-                        {(searchId || hostelFilter !== "All") && (
+                        {search && (
                             <Button
                                 size="small"
                                 variant="outlined"
                                 color="inherit"
                                 onClick={() => {
-                                    setSearchId("");
-                                    setHostelFilter("All");
+                                    setSearch("");
                                 }}
                             >
                                 Reset
@@ -181,51 +202,64 @@ export default function StaffOrderTable() {
                 <Table>
                     <TableHead>
                         <TableRow>
-                            <TableCell>Order ID</TableCell>
-                            <TableCell>Laundry ID</TableCell>
-                            <TableCell>Hostel</TableCell>
+                            <TableCell>Order Code</TableCell>
                             <TableCell>Date</TableCell>
                             <TableCell>Items</TableCell>
                             <TableCell>Status</TableCell>
                             <TableCell align="right">Action</TableCell>
                         </TableRow>
                     </TableHead>
+
                     <TableBody>
-                        {filteredOrders.length > 0 ? (
-                            filteredOrders.map((order) => (
-                                <TableRow key={order.id}>
-                                    <TableCell>{order.id}</TableCell>
-                                    <TableCell>{order.user}</TableCell>
-                                    <TableCell>{order.hostel}</TableCell>
-                                    <TableCell>{order.date}</TableCell>
-                                    <TableCell>
-                                        {order.items.map((item, i) => (
-                                            <Chip key={i} label={`${item.name} x${item.qty}`} size="small" sx={{ mr: 0.5, mb: 0.5 }} />
-                                        ))}
-                                    </TableCell>
-                                    <TableCell>
-                                        {order.status === "In Progress" ? (
-                                            <Chip label="In Progress" color="info" />
-                                        ) : (
-                                            <Chip label="Pending" color="warning" />
-                                        )}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        {order.status === "In Progress" ? (
-                                            <Button size="small" variant="outlined" onClick={() => markPending(order.id)}>
-                                                Set Pending
-                                            </Button>
-                                        ) : (
-                                            <Button size="small" variant="outlined" disabled>
-                                                Set Pending
-                                            </Button>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                                    <Stack alignItems="center" spacing={1}>
+                                        <CircularProgress />
+                                        <Typography variant="body2" color="text.secondary">
+                                            Loading orders…
+                                        </Typography>
+                                    </Stack>
+                                </TableCell>
+                            </TableRow>
+                        ) : filteredOrders.length > 0 ? (
+                            filteredOrders.map((order) => {
+                                const busy = Boolean(inFlight[order.id]);
+                                return (
+                                    <TableRow key={order.id}>
+                                        <TableCell>{order.orderCode}</TableCell>
+                                        <TableCell>{new Date(order.orderDate).toLocaleDateString()}</TableCell>
+                                        <TableCell>
+                                            {order.items.map((item, i) => (
+                                                <Chip key={i} label={`${item.itemType} x${item.quantity}`} size="small" sx={{ mr: 0.5, mb: 0.5 }} />
+                                            ))}
+                                        </TableCell>
+                                        <TableCell>
+                                            {order.orderStatus === "IN_PROGRESS" ? (
+                                                <Chip label="In Progress" color="info" />
+                                            ) : order.orderStatus === "PENDING" ? (
+                                                <Chip label="Pending" color="warning" />
+                                            ) : (
+                                                <Chip label={order.orderStatus} />
+                                            )}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            {order.orderStatus === "IN_PROGRESS" ? (
+                                                <Button size="small" variant="outlined" onClick={() => markPending(order.id)} disabled={busy}>
+                                                    {busy ? <CircularProgress size={16} /> : "Set Pending"}
+                                                </Button>
+                                            ) : (
+                                                <Button size="small" variant="outlined" disabled>
+                                                    Set Pending
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
                                     No orders found.
                                 </TableCell>
                             </TableRow>

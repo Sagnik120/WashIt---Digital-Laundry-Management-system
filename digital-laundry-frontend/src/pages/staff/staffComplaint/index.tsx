@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
     Box,
     Grid,
@@ -13,21 +13,26 @@ import {
     Dialog,
     DialogTitle,
     DialogContent,
-    TextField,
     DialogActions,
+    TextField,
     Chip,
     List,
     ListItem,
     ListItemAvatar,
     ListItemText,
     Badge,
+    CircularProgress,
 } from "@mui/material";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import PlayCircleFilledWhiteIcon from "@mui/icons-material/PlayCircleFilledWhite";
 import CountUp from "react-countup";
+import { useDispatch } from "react-redux";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
+import ErrorHandler from "@/lib/errorHandler";
+import { complaintsList } from "@/Redux/Actions/AuthUser";
+import { BaseUrl } from "@/ApiSetUp/AuthApi";
 
 type ComplaintStatus = "Open" | "In Review" | "Resolved";
 
@@ -41,10 +46,11 @@ interface Complaint {
     created_at: string; // ISO
     updated_at: string; // ISO
     attachment?: string;
-    order_id: string; // linked order (always present for staff view)
+    order_id: string;
 }
 
 export default function StaffComplaints() {
+    const dispatch = useDispatch();
     const { setSnackBar } = useSnackBar();
 
     // branding/colors
@@ -68,64 +74,12 @@ export default function StaffComplaints() {
         },
     };
 
-    // sample complaints (wire to API later)
-    const [complaints, setComplaints] = useState<Complaint[]>([
-        {
-            id: "c1",
-            ticket_no: "CMP-25001",
-            title: "Issue with order LDR-2025-0007",
-            description: "Water leakage noticed near delivery area.",
-            category: "Maintenance",
-            status: "Open",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
-            order_id: "LDR-2025-0007",
-        },
-        {
-            id: "c2",
-            ticket_no: "CMP-25002",
-            title: "Damaged button on shirt",
-            description: "One button missing after wash.",
-            category: "Maintenance",
-            status: "In Review",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-            order_id: "LDR-2025-0012",
-        },
-        {
-            id: "c3",
-            ticket_no: "CMP-25003",
-            title: "Late delivery for LDR-2025-0015",
-            description: "Delivery exceeded expected time by 24 hours.",
-            category: "Other",
-            status: "Open",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-            order_id: "LDR-2025-0015",
-        },
-        {
-            id: "c4",
-            ticket_no: "CMP-25004",
-            title: "Color faded (black jeans)",
-            description: "Significant fading observed.",
-            category: "Maintenance",
-            status: "In Review",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 50).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 10).toISOString(),
-            order_id: "LDR-2025-0018",
-        },
-        {
-            id: "c5",
-            ticket_no: "CMP-25005",
-            title: "Incorrect item count",
-            description: "One towel missing in the returned items.",
-            category: "Hostel",
-            status: "Resolved",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 60).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-            order_id: "LDR-2025-0020",
-        },
-    ]);
+    // complaints state (loaded from ComplaintsList action)
+    const [complaints, setComplaints] = useState<Complaint[]>([]);
+    const [loadingComplaints, setLoadingComplaints] = useState(false);
+
+    // per-complaint in-flight map to disable buttons / show spinner
+    const [inFlight, setInFlight] = useState<Record<string, boolean>>({});
 
     // search & filter
     const [statusFilter, setStatusFilter] = useState<"All" | ComplaintStatus>("All");
@@ -144,27 +98,125 @@ export default function StaffComplaints() {
         setViewCmp(null);
     };
 
-    // transition guards: Open -> In Review -> Resolved (no direct Open->Resolved)
-    const transition = (id: string, to: ComplaintStatus) => {
+    // auth helpers (used by advance API)
+    function getAuthToken() {
+        return localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+    }
+    function authHeaders() {
+        const token = getAuthToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        return headers;
+    }
+
+    // -------------------------
+    // helper to call advance API
+    // POST /api/complaints/{complaintId}/advance
+    // -------------------------
+    const advanceComplaint = async (complaintId: string) => {
+        if (!complaintId) return { ok: false, message: "Missing complaint id" };
+
+        setInFlight((p) => ({ ...p, [complaintId]: true }));
+
+        try {
+            const url = `${BaseUrl}/api/complaints/${encodeURIComponent(complaintId)}/advance`;
+            const res = await fetch(url, {
+                method: "POST",
+                headers: authHeaders(),
+                body: JSON.stringify({}), // API spec: no body required
+            });
+
+            let json: any = null;
+            try {
+                json = await res.json();
+            } catch {
+                json = null;
+            }
+
+            if (!res.ok) {
+                const msg = json?.message ?? `Failed (${res.status})`;
+                return { ok: false, message: msg, payload: json };
+            }
+
+            return { ok: true, message: json?.message ?? "Advanced successfully", payload: json };
+        } catch (err: any) {
+            return { ok: false, message: err?.message ?? "Network error" };
+        } finally {
+            setInFlight((p) => {
+                const nxt = { ...p };
+                delete nxt[complaintId];
+                return nxt;
+            });
+        }
+    };
+
+    // transition: call advance API and update local state only on success
+    const transition = async (id: string, to: ComplaintStatus) => {
+        // find complaint
+        const c0 = complaints.find((x) => x.id === id);
+        if (!c0) {
+            setSnackBar("error", "Complaint not found");
+            return;
+        }
+        const from = c0.status;
+
+        // allowed rules
+        const allowed = (from === "Open" && to === "In Review") || (from === "In Review" && to === "Resolved");
+        if (!allowed) {
+            setSnackBar("warning", `Not allowed: ${from} → ${to}`);
+            return;
+        }
+
+        // call API
+        const res = await advanceComplaint(id);
+        if (!res.ok) {
+            setSnackBar("error", res.message ?? "Failed to advance complaint");
+            return;
+        }
+
+        // update local state using server response if it returns the updated complaint, otherwise apply optimistic update
+        // try to extract updated complaint from res.payload (supports { data: { ... } } etc.)
+        const updatedFromServer = res.payload?.data ?? res.payload?.complaint ?? res.payload ?? null;
+
         setComplaints((prev) =>
             prev.map((c) => {
                 if (c.id !== id) return c;
-                const from = c.status;
 
-                // allowed rules
-                const allowed =
-                    (from === "Open" && to === "In Review") ||
-                    (from === "In Review" && to === "Resolved");
+                if (updatedFromServer && (updatedFromServer.id === id || updatedFromServer.complaintId === id)) {
+                    // map server response shape -> Complaint
+                    const statusRaw = (updatedFromServer.complaintStatus ?? updatedFromServer.status ?? "").toString().toUpperCase();
+                    const statusMapped: ComplaintStatus =
+                        statusRaw === "OPEN" ? "Open" : statusRaw === "IN_REVIEW" ? "In Review" : "Resolved";
 
-                if (!allowed) {
-                    setSnackBar("warning", `Not allowed: ${from} → ${to}`);
-                    return c;
+                    const orderCode = updatedFromServer.order?.orderCode ?? updatedFromServer.orderCode ?? updatedFromServer.orderId ?? c.order_id;
+
+                    const firstImage =
+                        Array.isArray(updatedFromServer.images) && updatedFromServer.images.length > 0
+                            ? updatedFromServer.images[0].imageUrl ?? updatedFromServer.images[0]
+                            : updatedFromServer.attachment ?? c.attachment;
+
+                    const mapped: Complaint = {
+                        id: updatedFromServer.id ?? id,
+                        ticket_no: updatedFromServer.ticket_no ?? updatedFromServer.ticketNo ?? c.ticket_no,
+                        title: updatedFromServer.title ?? c.title,
+                        description: updatedFromServer.description ?? updatedFromServer.msg ?? c.description,
+                        category: updatedFromServer.category ?? c.category,
+                        status: (statusMapped as ComplaintStatus) ?? to,
+                        created_at: updatedFromServer.createdAt ?? updatedFromServer.created_at ?? c.created_at,
+                        updated_at: updatedFromServer.updatedAt ?? updatedFromServer.updated_at ?? new Date().toISOString(),
+                        attachment: firstImage,
+                        order_id: orderCode,
+                    };
+                    // keep dialog in sync
+                    setViewCmp((v) => (v && v.id === id ? mapped : v));
+                    setSnackBar("success", res.message ?? `Updated: ${from} → ${to}`);
+                    return mapped;
                 }
 
+                // fallback: optimistic local update
                 const updated = { ...c, status: to, updated_at: new Date().toISOString() };
-                // keep dialog in sync if open on same record
                 setViewCmp((v) => (v && v.id === id ? updated : v));
-                setSnackBar("success", `Updated: ${from} → ${to}`);
+                setSnackBar("success", res.message ?? `Updated: ${from} → ${to}`);
                 return updated;
             })
         );
@@ -172,10 +224,7 @@ export default function StaffComplaints() {
 
     // derived: filtered complaints
     const filteredComplaints = useMemo(() => {
-        const base =
-            statusFilter === "All"
-                ? complaints
-                : complaints.filter((c) => c.status === statusFilter);
+        const base = statusFilter === "All" ? complaints : complaints.filter((c) => c.status === statusFilter);
 
         if (!search.trim()) return base;
         const q = search.toLowerCase();
@@ -197,12 +246,66 @@ export default function StaffComplaints() {
                 acc[c.status] = (acc[c.status] || 0) + 1;
                 return acc;
             },
-            { total: 0, Open: 0, "In Review": 0, Resolved: 0 } as Record<
-                "total" | ComplaintStatus,
-                number
-            >
+            { total: 0, Open: 0, "In Review": 0, Resolved: 0 } as Record<"total" | ComplaintStatus, number>
         );
     }, [complaints]);
+
+    // -----------------------
+    // Load complaints via action
+    // -----------------------
+    const loadComplaints = async () => {
+        setLoadingComplaints(true);
+        try {
+            const res: any = await (dispatch as any)(complaintsList() as any);
+
+            const ok = ErrorHandler(res, setSnackBar);
+            if (!ok) {
+                setComplaints([]);
+                return;
+            }
+
+            const body = res?.payload ?? res?.data ?? res;
+            const arr = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : body?.complaints ?? [];
+
+            const mapped: Complaint[] = (arr || []).map((c: any, idx: number) => {
+                const statusRaw = (c.complaintStatus ?? c.status ?? "OPEN").toString().toUpperCase();
+                const statusMapped: ComplaintStatus = statusRaw === "OPEN" ? "Open" : statusRaw === "IN_REVIEW" ? "In Review" : "Resolved";
+
+                const orderCode = c.order?.orderCode ?? c.orderCode ?? c.orderId ?? c.order_id ?? "";
+
+                const ticket_no = c.ticket_no ?? c.ticketNo ?? `CMP-${String(idx + 1).padStart(5, "0")}`;
+
+                const firstImage =
+                    Array.isArray(c.images) && c.images.length > 0 ? (c.images[0].imageUrl ?? c.images[0]) : c.attachment ?? undefined;
+
+                return {
+                    id: c.id ?? `cmp_${idx}_${Date.now()}`,
+                    ticket_no,
+                    title: c.title ?? `Issue with order ${orderCode || "(unknown)"}`,
+                    description: c.description ?? c.msg ?? "",
+                    category: (c.category as any) ?? "Maintenance",
+                    status: statusMapped,
+                    created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
+                    updated_at: c.updatedAt ?? c.updated_at ?? new Date().toISOString(),
+                    attachment: firstImage,
+                    order_id: orderCode,
+                } as Complaint;
+            });
+
+            setComplaints(mapped);
+        } catch (err: any) {
+            console.error("loadComplaints error:", err);
+            setSnackBar("error", err?.message ?? "Failed to load complaints");
+            setComplaints([]);
+        } finally {
+            setLoadingComplaints(false);
+        }
+    };
+
+    useEffect(() => {
+        loadComplaints();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <>
@@ -234,18 +337,9 @@ export default function StaffComplaints() {
                             }}
                         >
                             {/* Header */}
-                            <Box
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="space-between"
-                                mb={2}
-                                gap={2}
-                            >
+                            <Box display="flex" alignItems="center" justifyContent="space-between" mb={2} gap={2}>
                                 <Stack direction="row" alignItems="center" spacing={1.5}>
-                                    <Badge
-                                        overlap="circular"
-                                        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                                    >
+                                    <Badge overlap="circular" anchorOrigin={{ vertical: "bottom", horizontal: "right" }}>
                                         <Avatar sx={{ bgcolor: BRAND.review, width: 40, height: 40 }}>
                                             <ReportProblemIcon />
                                         </Avatar>
@@ -266,12 +360,14 @@ export default function StaffComplaints() {
 
                             {/* Status Counters */}
                             <Grid container spacing={2} mb={2}>
-                                {([
-                                    { label: "All", value: "All", color: "#64748b", count: complaintCounts.total },
-                                    { label: "Open", value: "Open", color: BRAND.open, count: complaintCounts["Open"] },
-                                    { label: "In Review", value: "In Review", color: BRAND.review, count: complaintCounts["In Review"] },
-                                    { label: "Resolved", value: "Resolved", color: BRAND.resolved, count: complaintCounts["Resolved"] },
-                                ] as const).map((f) => (
+                                {(
+                                    [
+                                        { label: "All", value: "All", color: "#64748b", count: complaintCounts.total },
+                                        { label: "Open", value: "Open", color: BRAND.open, count: complaintCounts["Open"] },
+                                        { label: "In Review", value: "In Review", color: BRAND.review, count: complaintCounts["In Review"] },
+                                        { label: "Resolved", value: "Resolved", color: BRAND.resolved, count: complaintCounts["Resolved"] },
+                                    ] as const
+                                ).map((f) => (
                                     <Grid item xs={6} sm={3} key={f.value as string}>
                                         <Card
                                             onClick={() => setStatusFilter(f.value as any)}
@@ -311,121 +407,142 @@ export default function StaffComplaints() {
                                 }}
                             >
                                 <List sx={{ width: "100%" }}>
-                                    {filteredComplaints.length === 0 && (
+                                    {loadingComplaints ? (
+                                        <Box py={6} textAlign="center">
+                                            <CircularProgress />
+                                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                                Loading complaints…
+                                            </Typography>
+                                        </Box>
+                                    ) : filteredComplaints.length === 0 ? (
                                         <Box py={6} textAlign="center">
                                             <Typography variant="body1" color="text.secondary">
                                                 No complaints match your filter.
                                             </Typography>
                                         </Box>
-                                    )}
-
-                                    {filteredComplaints.map((c) => (
-                                        <ListItem
-                                            key={c.id}
-                                            alignItems="flex-start"
-                                            sx={{
-                                                px: 2,
-                                                py: 1.5,
-                                                borderRadius: 3,
-                                                "&:hover": { backgroundColor: "#f8fafc" },
-                                            }}
-                                            secondaryAction={
-                                                <Stack direction="row" spacing={1} alignItems="center">
-                                                    {/* linked order id */}
-                                                    <Chip
-                                                        size="small"
-                                                        variant="outlined"
-                                                        label={c.order_id}
-                                                        sx={{ fontWeight: 600 }}
-                                                    />
-                                                    {/* complaint status */}
-                                                    <Chip
-                                                        size="small"
-                                                        label={c.status}
-                                                        sx={{
-                                                            backgroundColor: BRAND.chipBg()[c.status],
-                                                            color: BRAND.color()[c.status],
-                                                            fontWeight: 700,
-                                                        }}
-                                                    />
-                                                    {/* linked order status - always Pending */}
-                                                    <Chip size="small" color="warning" label="Order: Pending" />
-
-                                                    {/* actions based on status */}
-                                                    {c.status === "Open" && (
-                                                        <Tooltip title="Move to In Review">
-                                                            <Button
-                                                                size="small"
-                                                                variant="outlined"
-                                                                startIcon={<PlayCircleFilledWhiteIcon />}
-                                                                onClick={() => transition(c.id, "In Review")}
-                                                            >
-                                                                Start Review
-                                                            </Button>
-                                                        </Tooltip>
-                                                    )}
-                                                    {c.status === "In Review" && (
-                                                        <Tooltip title="Mark as Resolved (after review)">
-                                                            <Button
-                                                                size="small"
-                                                                variant="contained"
-                                                                startIcon={<AssignmentTurnedInIcon />}
-                                                                onClick={() => transition(c.id, "Resolved")}
-                                                            >
-                                                                Resolve
-                                                            </Button>
-                                                        </Tooltip>
-                                                    )}
-
-                                                    <Tooltip title="View details">
-                                                        <IconButton onClick={() => openView(c)}>
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </Stack>
-                                            }
-                                        >
-                                            <ListItemAvatar>
-                                                <Avatar sx={{ bgcolor: BRAND.color()[c.status] }}>
-                                                    <ReportProblemIcon />
-                                                </Avatar>
-                                            </ListItemAvatar>
-                                            <ListItemText
-                                                primary={
-                                                    <Stack direction="row" spacing={1} alignItems="center">
-                                                        <Typography variant="subtitle1" fontWeight={700}>
-                                                            {c.title}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            • {c.ticket_no}
-                                                        </Typography>
-                                                    </Stack>
-                                                }
-                                                secondary={
-                                                    <Stack spacing={0.5}>
-                                                        <Typography
-                                                            variant="body2"
-                                                            color="text.secondary"
-                                                            sx={{
-                                                                display: "-webkit-box",
-                                                                WebkitLineClamp: 2,
-                                                                WebkitBoxOrient: "vertical",
-                                                                overflow: "hidden",
-                                                            }}
+                                    ) : (
+                                        filteredComplaints.map((c) => {
+                                            const busy = Boolean(inFlight[c.id]);
+                                            return (
+                                                <ListItem
+                                                    key={c.id}
+                                                    alignItems="flex-start"
+                                                    sx={{
+                                                        px: 2,
+                                                        py: 1.5,
+                                                        borderRadius: 3,
+                                                        "&:hover": { backgroundColor: "#f8fafc" },
+                                                    }}
+                                                    secondaryAction={
+                                                        <Stack
+                                                            direction="row"
+                                                            spacing={1}
+                                                            alignItems="center"
+                                                            sx={{ flexWrap: "wrap", rowGap: 1 }}
+                                                            justifyContent="flex-end"
                                                         >
-                                                            {c.description}
-                                                        </Typography>
-                                                        <Stack direction="row" spacing={1} alignItems="center">
-                                                            <Chip size="small" variant="outlined" label={c.category} />
-                                                            <Typography variant="caption" color="text.secondary">
-                                                                Created: {new Date(c.created_at).toLocaleString()}
-                                                            </Typography>
+                                                            {/* linked order id */}
+                                                            <Chip size="small" variant="outlined" label={c.order_id} sx={{ fontWeight: 600 }} />
+
+                                                            {/* complaint status */}
+                                                            <Chip
+                                                                size="small"
+                                                                label={c.status}
+                                                                sx={{
+                                                                    backgroundColor: BRAND.chipBg()[c.status],
+                                                                    color: BRAND.color()[c.status],
+                                                                    fontWeight: 700,
+                                                                }}
+                                                            />
+
+                                                            {/* linked order status - always Pending */}
+                                                            <Chip size="small" color="warning" label="Order: Pending" />
+
+                                                            {/* actions based on status */}
+                                                            {c.status === "Open" && (
+                                                                <Tooltip title="Move to In Review">
+                                                                    <span>
+                                                                        <Button
+                                                                            size="small"
+                                                                            variant="outlined"
+                                                                            startIcon={busy ? undefined : <PlayCircleFilledWhiteIcon />}
+                                                                            onClick={() => transition(c.id, "In Review")}
+                                                                            disabled={busy}
+                                                                        >
+                                                                            {busy ? <CircularProgress size={16} /> : "Start Review"}
+                                                                        </Button>
+                                                                    </span>
+                                                                </Tooltip>
+                                                            )}
+
+                                                            {c.status === "In Review" && (
+                                                                <Tooltip title="Mark as Resolved (after review)">
+                                                                    <span>
+                                                                        <Button
+                                                                            size="small"
+                                                                            variant="contained"
+                                                                            startIcon={busy ? undefined : <AssignmentTurnedInIcon />}
+                                                                            onClick={() => transition(c.id, "Resolved")}
+                                                                            disabled={busy}
+                                                                        >
+                                                                            {busy ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : "Resolve"}
+                                                                        </Button>
+                                                                    </span>
+                                                                </Tooltip>
+                                                            )}
+
+                                                            <Tooltip title="View details">
+                                                                <IconButton onClick={() => openView(c)} disabled={busy}>
+                                                                    <VisibilityIcon />
+                                                                </IconButton>
+                                                            </Tooltip>
                                                         </Stack>
-                                                    </Stack>
-                                                }
-                                            />
-                                        </ListItem>
-                                    ))}
+                                                    }
+                                                >
+                                                    <ListItemAvatar>
+                                                        <Avatar sx={{ bgcolor: BRAND.color()[c.status] }}>
+                                                            <ReportProblemIcon />
+                                                        </Avatar>
+                                                    </ListItemAvatar>
+
+                                                    <ListItemText
+                                                        primary={
+                                                            <Stack direction="row" spacing={1} alignItems="center">
+                                                                <Typography variant="subtitle1" fontWeight={700}>
+                                                                    {c.title}
+                                                                </Typography>
+                                                                <Typography variant="caption" color="text.secondary">
+                                                                    • {c.ticket_no}
+                                                                </Typography>
+                                                            </Stack>
+                                                        }
+                                                        secondary={
+                                                            <Stack spacing={0.5}>
+                                                                <Typography
+                                                                    variant="body2"
+                                                                    color="text.secondary"
+                                                                    sx={{
+                                                                        display: "-webkit-box",
+                                                                        WebkitLineClamp: 2,
+                                                                        WebkitBoxOrient: "vertical",
+                                                                        overflow: "hidden",
+                                                                    }}
+                                                                >
+                                                                    {c.description}
+                                                                </Typography>
+                                                                <Stack direction="row" spacing={1} alignItems="center">
+                                                                    <Chip size="small" variant="outlined" label={c.category} />
+                                                                    <Typography variant="caption" color="text.secondary">
+                                                                        Created: {new Date(c.created_at).toLocaleString()}
+                                                                    </Typography>
+                                                                </Stack>
+                                                            </Stack>
+                                                        }
+                                                    />
+                                                </ListItem>
+                                            );
+                                        })
+                                    )}
                                 </List>
                             </Card>
                         </Card>
@@ -476,15 +593,7 @@ export default function StaffComplaints() {
                         </Stack>
 
                         {/* Description */}
-                        <Box
-                            sx={{
-                                p: 2,
-                                borderRadius: 2,
-                                bgcolor: "#f8fafc",
-                                border: "1px solid #e5e7eb",
-                                whiteSpace: "pre-wrap",
-                            }}
-                        >
+                        <Box sx={{ p: 2, borderRadius: 2, bgcolor: "#f8fafc", border: "1px solid #e5e7eb", whiteSpace: "pre-wrap" }}>
                             <Typography variant="subtitle2" gutterBottom>
                                 Description
                             </Typography>
@@ -499,21 +608,9 @@ export default function StaffComplaints() {
                                 <Typography variant="subtitle2" gutterBottom>
                                     Attachment
                                 </Typography>
-                                <Box
-                                    sx={{
-                                        p: 1,
-                                        borderRadius: 2,
-                                        border: "1px solid #e5e7eb",
-                                        display: "inline-block",
-                                        bgcolor: "#fff",
-                                    }}
-                                >
+                                <Box sx={{ p: 1, borderRadius: 2, border: "1px solid #e5e7eb", display: "inline-block", bgcolor: "#fff" }}>
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img
-                                        src={viewCmp.attachment}
-                                        alt="Complaint attachment"
-                                        style={{ maxWidth: "100%", borderRadius: 8, display: "block" }}
-                                    />
+                                    <img src={viewCmp.attachment} alt="Complaint attachment" style={{ maxWidth: "100%", borderRadius: 8, display: "block" }} />
                                 </Box>
                             </Box>
                         )}
@@ -526,8 +623,9 @@ export default function StaffComplaints() {
                             variant="outlined"
                             startIcon={<PlayCircleFilledWhiteIcon />}
                             onClick={() => viewCmp && transition(viewCmp.id, "In Review")}
+                            disabled={Boolean(inFlight[viewCmp?.id ?? ""])}
                         >
-                            Start Review
+                            {inFlight[viewCmp?.id ?? ""] ? <CircularProgress size={16} /> : "Start Review"}
                         </Button>
                     )}
                     {viewCmp?.status === "In Review" && (
@@ -535,8 +633,9 @@ export default function StaffComplaints() {
                             variant="contained"
                             startIcon={<AssignmentTurnedInIcon />}
                             onClick={() => viewCmp && transition(viewCmp.id, "Resolved")}
+                            disabled={Boolean(inFlight[viewCmp?.id ?? ""])}
                         >
-                            Mark Resolved
+                            {inFlight[viewCmp?.id ?? ""] ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : "Mark Resolved"}
                         </Button>
                     )}
                     <Button onClick={closeView}>Close</Button>

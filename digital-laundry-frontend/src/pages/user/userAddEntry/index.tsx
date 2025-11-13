@@ -12,7 +12,6 @@ import {
     Stack,
     IconButton,
     Divider,
-    Chip,
 } from "@mui/material";
 import {
     AddCircle,
@@ -21,19 +20,19 @@ import {
     Close as CloseIcon,
     PhotoCamera,
 } from "@mui/icons-material";
-import { AddStudentEntry } from "@/Redux/Actions/AuthUser";
 import { useDispatch } from "react-redux";
 import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import ErrorHandler from "@/lib/errorHandler";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
+import { CreateOrder } from "@/Redux/Actions/AuthUser";
+import { BaseUrl } from "@/ApiSetUp/AuthApi";
 
 interface Item {
     item_name: string;
     quantity: number;
-    service_type: string; // per-item Type
-    photos: string[];     // per-item photos (data URLs)
-    remark: string;       // per-item remark
+    photos: string[]; // data URLs
+    remark: string;
 }
 
 export default function AddLaundryEntry() {
@@ -48,8 +47,10 @@ export default function AddLaundryEntry() {
         items: [] as Item[],
     });
 
+    // removed uploadedImages debug dialog/state so nothing will pop up after submit
+    const [submitting, setSubmitting] = useState(false);
+
     const ITEM_NAMES = ["shirt", "pant", "bedsheet", "towel", "t-shirt"];
-    const SERVICE_TYPES = ["Normal", "Express", "Dry Clean"];
 
     const addItem = () => {
         const remaining = ITEM_NAMES.filter(
@@ -63,7 +64,6 @@ export default function AddLaundryEntry() {
                     {
                         item_name: remaining[0],
                         quantity: 1,
-                        service_type: "Normal", // default
                         photos: [],
                         remark: "",
                     },
@@ -87,7 +87,6 @@ export default function AddLaundryEntry() {
         });
     };
 
-    // ✅ Per-item photo upload
     const handleItemPhotosUpload = (index: number, files: FileList | null) => {
         if (!files || files.length === 0) return;
 
@@ -103,12 +102,11 @@ export default function AddLaundryEntry() {
         Promise.all(readers).then((dataUrls) => {
             setOrder((prev) => {
                 const items = [...prev.items];
-                items[index].photos = dataUrls; // 🔁 REPLACE instead of [...existing, ...dataUrls]
+                items[index].photos = dataUrls;
                 return { ...prev, items };
             });
         });
     };
-
 
     const removeItemPhoto = (index: number, photoIdx: number) => {
         setOrder((prev) => {
@@ -118,37 +116,141 @@ export default function AddLaundryEntry() {
         });
     };
 
+    // auth header helpers
+    function getAuthToken() {
+        return (
+            localStorage.getItem("token") ||
+            localStorage.getItem("authToken") ||
+            ""
+        );
+    }
+    function authHeaders() {
+        const token = getAuthToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        return headers;
+    }
+
+    const findItemId = (returnedItems: any[], localItem: Item, idx: number) => {
+        if (!returnedItems || returnedItems.length === 0) return null;
+        const byType = returnedItems.find(
+            (ri) =>
+                String((ri.itemType ?? ri.item_type ?? ri.name ?? "")).toLowerCase() ===
+                String(localItem.item_name).toLowerCase()
+        );
+        if (byType?.id) return byType.id;
+        const atIdx = returnedItems[idx];
+        if (atIdx?.id) return atIdx.id;
+        const anyWithId = returnedItems.find((ri) => ri.id);
+        return anyWithId?.id ?? null;
+    };
+
+    // ---------- handle submit (create order -> upload images per item) ----------
     const handleSubmit = async () => {
-        if (!order.id.trim()) {
-            setSnackBar("warning", "Please enter a Unique Laundry ID.");
-            return;
-        }
         if (order.items.length === 0) {
             setSnackBar("warning", "Please add at least one item.");
             return;
         }
 
+        for (let i = 0; i < order.items.length; i++) {
+            const it = order.items[i];
+            if (!it.item_name || !(it.quantity >= 1)) {
+                setSnackBar("warning", `Please provide valid item & quantity for item #${i + 1}.`);
+                return;
+            }
+        }
+
         setFullPageLoader(true);
+        setSubmitting(true);
 
-        const body = {
-            submission_date: order.date,
-            items: order.items, // now includes service_type, remark, photos per item
-            external_id: order.id,
-        };
+        try {
+            const payload = {
+                orderDate: order.date,
+                items: order.items.map((it) => ({
+                    itemType: it.item_name,
+                    quantity: Number(it.quantity) || 0,
+                    remark: it.remark || "",
+                })),
+            };
 
-        dispatch(AddStudentEntry(body as any))
-            .then((res: any) => {
-                const error = ErrorHandler(res, setSnackBar);
-                if (error) {
-                    router.push("/user/userHistory");
-                }
-            })
-            .catch(() => {
-                setSnackBar("error", "Please provide correct details.");
-            })
-            .finally(() => {
+            // 1) create order via redux action
+            const res: any = await dispatch(CreateOrder(payload as any));
+            const ok = ErrorHandler(res, setSnackBar);
+
+            if (!ok) {
                 setFullPageLoader(false);
-            });
+                setSubmitting(false);
+                return;
+            }
+            const created = res?.payload ?? res?.data ?? null;
+            const orderObj = created?.order ?? created?.data?.order ?? created ?? null;
+            const orderId =
+                orderObj?.id ?? created?.id ?? created?.orderId ?? created?.order_id ?? null;
+
+            if (!orderId) {
+                setSnackBar(
+                    "warning",
+                    "Order created but server did not return order id. Images could not be uploaded."
+                );
+                router.push("/user/userHistory");
+                return;
+            }
+
+            const returnedItems: any[] =
+                orderObj?.items ?? created?.items ?? orderObj?.orderItems ?? [];
+
+            // 3) upload images per-item (sequential)
+            for (let i = 0; i < order.items.length; i++) {
+                const localItem = order.items[i];
+                if (!localItem.photos || localItem.photos.length === 0) continue;
+
+                const itemId = findItemId(returnedItems, localItem, i);
+                if (!itemId) {
+                    setSnackBar(
+                        "warning",
+                        `Skipping image upload for item "${localItem.item_name}" — server item id not available.`
+                    );
+                    continue;
+                }
+
+                try {
+                    const url = `${BaseUrl}/api/orders/${orderId}/items/${itemId}/images`;
+                    const body = { images: localItem.photos };
+
+                    const r = await fetch(url, {
+                        method: "POST",
+                        headers: authHeaders(),
+                        body: JSON.stringify(body),
+                    });
+
+                    let json = null;
+                    try {
+                        json = await r.json();
+                    } catch {
+                        json = null;
+                    }
+
+                    if (!r.ok) {
+                        const msg = json?.message ?? `Upload failed (${r.status})`;
+                        setSnackBar("warning", `Images upload failed for ${localItem.item_name}: ${msg}`);
+                    } else {
+                        // upload succeeded — no visible debug panel will be shown
+                    }
+                } catch (err: any) {
+                    console.error("upload error", err);
+                    setSnackBar("warning", `Images upload failed for ${localItem.item_name}.`);
+                }
+            }
+
+            setSnackBar("success", "Order created successfully. Images uploaded where possible.");
+            router.push("/user/userHistory");
+        } catch (err: any) {
+            console.error(err);
+            setSnackBar("error", err.message || "Please provide correct details.");
+        } finally {
+            setFullPageLoader(false);
+            setSubmitting(false);
+        }
     };
 
     const allItemsAdded = order.items.length >= ITEM_NAMES.length;
@@ -182,14 +284,6 @@ export default function AddLaundryEntry() {
                     {/* Order Info */}
                     <Grid container spacing={3}>
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                label="Unique Laundry ID"
-                                value={order.id}
-                                onChange={(e) => setOrder({ ...order, id: e.target.value })}
-                                fullWidth
-                                required
-                                sx={{ background: "#f9fafb", borderRadius: 2 }}
-                            />
                         </Grid>
 
                         <Grid item xs={12} sm={6}>
@@ -205,12 +299,10 @@ export default function AddLaundryEntry() {
                         </Grid>
                     </Grid>
 
-                    {/* Divider */}
                     <Box my={3}>
                         <Divider />
                     </Box>
 
-                    {/* Items Section */}
                     <Typography variant="h6" fontWeight={600} gutterBottom color="secondary">
                         Items in this Order
                     </Typography>
@@ -243,26 +335,15 @@ export default function AddLaundryEntry() {
                                             borderRadius: 3,
                                             boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
                                             background: "linear-gradient(145deg, #dbeafe, #eff6ff)",
-                                            transition: "0.3s",
-                                            "&:hover": {
-                                                transform: "translateY(-4px)",
-                                                boxShadow: "0 12px 25px rgba(0,0,0,0.15)",
-                                            },
                                         }}
                                     >
-                                        {/* Header */}
                                         <Grid container alignItems="center" spacing={2}>
                                             <Grid item xs={12} sm={6}>
                                                 <Typography variant="h6" fontWeight={600} color="primary">
                                                     Item {index + 1}: {item.item_name}
                                                 </Typography>
                                             </Grid>
-                                            <Grid
-                                                item
-                                                xs={12}
-                                                sm={6}
-                                                textAlign={{ xs: "left", sm: "right" }}
-                                            >
+                                            <Grid item xs={12} sm={6} textAlign={{ xs: "left", sm: "right" }}>
                                                 {order.items.length > 1 && (
                                                     <Button
                                                         variant="outlined"
@@ -279,25 +360,18 @@ export default function AddLaundryEntry() {
 
                                         <Divider sx={{ my: 2 }} />
 
-                                        {/* Item Fields */}
                                         <Grid container spacing={2}>
-                                            {/* Item Name (unique) */}
                                             <Grid item xs={12} sm={3}>
                                                 <TextField
                                                     select
                                                     label="Item"
                                                     value={item.item_name}
-                                                    onChange={(e) =>
-                                                        handleItemChange(index, "item_name", e.target.value)
-                                                    }
+                                                    onChange={(e) => handleItemChange(index, "item_name", e.target.value)}
                                                     fullWidth
                                                     sx={{ background: "#fff", borderRadius: 2 }}
                                                 >
                                                     {ITEM_NAMES.filter(
-                                                        (name) =>
-                                                            !order.items.some(
-                                                                (it, i) => it.item_name === name && i !== index
-                                                            )
+                                                        (name) => !order.items.some((it, i) => it.item_name === name && i !== index)
                                                     ).map((name) => (
                                                         <MenuItem key={name} value={name}>
                                                             {name}
@@ -306,18 +380,13 @@ export default function AddLaundryEntry() {
                                                 </TextField>
                                             </Grid>
 
-                                            {/* Quantity */}
                                             <Grid item xs={12} sm={3}>
                                                 <TextField
                                                     type="number"
                                                     label="Quantity"
                                                     value={item.quantity}
                                                     onChange={(e) =>
-                                                        handleItemChange(
-                                                            index,
-                                                            "quantity",
-                                                            Math.max(1, parseInt(e.target.value) || 1)
-                                                        )
+                                                        handleItemChange(index, "quantity", Math.max(1, parseInt(e.target.value) || 1))
                                                     }
                                                     fullWidth
                                                     inputProps={{ min: 1 }}
@@ -325,27 +394,6 @@ export default function AddLaundryEntry() {
                                                 />
                                             </Grid>
 
-                                            {/* ✅ Per-item Type (white, default Normal) */}
-                                            <Grid item xs={12} sm={3}>
-                                                <TextField
-                                                    select
-                                                    label="Type"
-                                                    value={item.service_type}
-                                                    onChange={(e) =>
-                                                        handleItemChange(index, "service_type", e.target.value)
-                                                    }
-                                                    fullWidth
-                                                    sx={{ background: "#fff", borderRadius: 2 }}
-                                                >
-                                                    {SERVICE_TYPES.map((t) => (
-                                                        <MenuItem key={t} value={t}>
-                                                            {t}
-                                                        </MenuItem>
-                                                    ))}
-                                                </TextField>
-                                            </Grid>
-
-                                            {/* ✅ Per-item Photos upload */}
                                             <Grid item xs={12} sm={3}>
                                                 <Button
                                                     component="label"
@@ -367,21 +415,18 @@ export default function AddLaundryEntry() {
                                                         multiple
                                                         onChange={(e) => {
                                                             handleItemPhotosUpload(index, e.target.files);
-                                                            e.currentTarget.value = "";
+                                                            if (e.currentTarget) e.currentTarget.value = "";
                                                         }}
                                                     />
                                                 </Button>
                                             </Grid>
 
-                                            {/* ✅ Per-item Remark */}
                                             <Grid item xs={12}>
                                                 <TextField
                                                     label="Remark (optional)"
                                                     placeholder="Any special instructions for this item…"
                                                     value={item.remark}
-                                                    onChange={(e) =>
-                                                        handleItemChange(index, "remark", e.target.value)
-                                                    }
+                                                    onChange={(e) => handleItemChange(index, "remark", e.target.value)}
                                                     fullWidth
                                                     multiline
                                                     minRows={2}
@@ -390,7 +435,6 @@ export default function AddLaundryEntry() {
                                             </Grid>
                                         </Grid>
 
-                                        {/* Per-item Photo Previews */}
                                         {item.photos && item.photos.length > 0 && (
                                             <Grid container spacing={1.5} mt={1}>
                                                 {item.photos.map((src, pIdx) => (
@@ -403,7 +447,6 @@ export default function AddLaundryEntry() {
                                                                 border: "1px solid #e5e7eb",
                                                             }}
                                                         >
-                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
                                                             <img
                                                                 src={src}
                                                                 alt={`item-${index}-photo-${pIdx}`}
@@ -439,7 +482,6 @@ export default function AddLaundryEntry() {
                         </Grid>
                     )}
 
-                    {/* Add Item Button */}
                     <Button
                         variant="contained"
                         startIcon={<AddCircle />}
@@ -448,9 +490,7 @@ export default function AddLaundryEntry() {
                         sx={{
                             mt: 2,
                             borderRadius: 3,
-                            background: allItemsAdded
-                                ? "#9ca3af"
-                                : "linear-gradient(135deg,#3b82f6,#2563eb)",
+                            background: allItemsAdded ? "#9ca3af" : "linear-gradient(135deg,#3b82f6,#2563eb)",
                             color: "#fff",
                             fontWeight: 600,
                             textTransform: "none",
@@ -466,7 +506,6 @@ export default function AddLaundryEntry() {
                         {allItemsAdded ? "All items added" : "+ Add Item"}
                     </Button>
 
-                    {/* Submit Buttons */}
                     <Stack direction="row" justifyContent="flex-end" spacing={2} mt={4}>
                         <Button
                             variant="contained"
@@ -480,6 +519,7 @@ export default function AddLaundryEntry() {
                                 textTransform: "none",
                                 fontWeight: 600,
                             }}
+                            disabled={submitting}
                         >
                             Submit Entry
                         </Button>
@@ -500,6 +540,7 @@ export default function AddLaundryEntry() {
                                 textTransform: "none",
                                 fontWeight: 600,
                             }}
+                            disabled={submitting}
                         >
                             Reset
                         </Button>

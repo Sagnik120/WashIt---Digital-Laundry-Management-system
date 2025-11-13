@@ -6,6 +6,8 @@ import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import { useRouter } from "next/navigation";
 import { useDispatch } from "react-redux";
+import ErrorHandler from "@/lib/errorHandler";
+import { forgotPassword } from "@/Redux/Actions/AuthUser";
 
 const ForgotPassword = () => {
 
@@ -59,15 +61,35 @@ const ForgotPassword = () => {
         return isValid;
     };
 
-    const handleSubmit = () => {
-        if (validate()) {
-            // Proceed with login
-            setSnackBar("success", "Temporary password has been sent to your email!");
-            // Add your login API call here
-        } else {
-            setSnackBar("error", "Please fix the errors before submitting");
-        }
-    };
+    const handleSubmit = async () => {
+            try {
+                if (validate()) {
+                    setFullPageLoader(true);
+                    const body = {
+                        "email": data?.email
+                    };
+    
+                    const res: any = await dispatch(forgotPassword(body));
+                    const error = ErrorHandler(res, setSnackBar);
+    
+                    if (!error) {
+                        setSnackBar('error', res?.payload?.data?.message || 'somthing wrong!');
+                        setFullPageLoader(false);
+                        return;
+                    }
+                    router.push('/auth/change-password');
+                    setSnackBar("success", "Temporary password has been sent to your email!");
+                } else {
+                    setSnackBar("error", "Please fix the errors before submitting");
+                }
+            } catch (error: any) {
+                console.error('Login error:', error);
+                setSnackBar('error', error?.message || 'Something went wrong during login');
+                setFullPageLoader(false);
+            } finally {
+                setFullPageLoader(false);
+            }
+        };
 
     return (
         <AuthWrapper>

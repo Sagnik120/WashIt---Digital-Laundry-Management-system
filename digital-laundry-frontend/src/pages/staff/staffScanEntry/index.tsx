@@ -1,11 +1,15 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Box, Typography, Button, Stack } from "@mui/material";
 import { UploadFile } from "@mui/icons-material";
 import { useRouter } from "next/router";
+import usePageLoader from "@/Redux/hooks/usePageLoader";
+import useSnackBar from "@/Redux/hooks/useSnackBar";
+import { QrScan } from "@/Redux/Actions/AuthUser";
+import ErrorHandler from "@/lib/errorHandler";
+import { useDispatch } from "react-redux";
 
-// Dynamic import for react-qr-reader (client-side only)
 const QrReader = dynamic(
     () => import("react-qr-reader").then((mod) => mod.QrReader || mod),
     { ssr: false }
@@ -15,6 +19,38 @@ export default function StaffScanEntry() {
     const router = useRouter();
     const [scanData, setScanData] = useState<string | null>(null);
     const [imageScanData, setImageScanData] = useState<string | null>(null);
+    const setFullPageLoader = usePageLoader();
+    const { setSnackBar } = useSnackBar();
+    const dispatch = useDispatch();
+
+    const qrScan = async (qrPayload: string | null) => {
+        if (!qrPayload) {
+            setSnackBar("warning", "Empty QR payload.");
+            return false;
+        }
+        setFullPageLoader(true);
+
+        try {
+            const res: any = await dispatch(QrScan({ qrPayload }) as any);
+
+            const ok = ErrorHandler(res, setSnackBar);
+
+            if (ok) {
+                setSnackBar("success", (res?.payload?.message ?? res?.message) || "QR processed successfully.");
+                router.push("/staff/staffOrder");
+                return true;
+            } else {
+                setSnackBar("error", res?.payload?.data?.message ?? "Network/error while processing QR.");
+                return false;
+            }
+        } catch (err: any) {
+            console.error("qrScan dispatch error:", err);
+            setSnackBar("error", err?.message ?? "Network/error while processing QR.");
+            return false;
+        } finally {
+            setFullPageLoader(false);
+        }
+    };
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -34,17 +70,39 @@ export default function StaffScanEntry() {
                     ctx?.drawImage(img, 0, 0);
                     const imageData = ctx?.getImageData(0, 0, img.width, img.height);
                     const code = imageData && jsQR(imageData.data, img.width, img.height);
-                    if (code) setImageScanData(code.data);
-                    else setImageScanData("No QR code found in image.");
+                    if (code && code.data) {
+                        setImageScanData(code.data);
+                        const res: any = await dispatch(QrScan({ "qrPayload": code.data }) as any);
+                        const ok = ErrorHandler(res, setSnackBar);
+                        if (ok) {
+                            setSnackBar("success", (res?.payload?.message ?? res?.message) || "QR processed successfully.");
+                            router.push("/staff/staffOrder");
+                            return true;
+                        } else {
+                            console.log(res, 'ah')
+                            setSnackBar("error", res ?.payload?.data?.message ?? "Network/error while processing QR.");
+                            return false;
+                        }
+                        router.push("/staff/staffOrder");
+                    } else {
+                        setImageScanData("No QR code found in image.");
+                        setSnackBar("warning", "No QR code found in the uploaded image.");
+                    }
                 } catch (err) {
                     console.error(err);
                     setImageScanData("Failed to read QR code.");
+                    setSnackBar("error", "Failed to read QR code from image.");
                 }
             };
         };
         reader.readAsDataURL(file);
-        router.push("/staff/staffOrder")
     };
+
+    useEffect(() => {
+        if(scanData){
+            qrScan(scanData || '');
+        }
+    }, [scanData])
 
     return (
         <Box
@@ -89,7 +147,6 @@ export default function StaffScanEntry() {
                             onResult={(result, error) => {
                                 if (result) {
                                     setScanData(result.getText());
-                                    router.push("/staff/staffOrder")
                                 };
                                 if (error) console.error(error);
                             }}

@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     Box,
     Grid,
@@ -16,7 +16,7 @@ import {
     Button,
     MenuItem,
     Select,
-    TextField,
+    CircularProgress,
 } from "@mui/material";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import ManageSearchIcon from "@mui/icons-material/ManageSearch";
@@ -24,7 +24,17 @@ import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CountUp from "react-countup";
 
+import { useDispatch } from "react-redux";
+import ErrorHandler from "@/lib/errorHandler"; // adjust if needed
+import { complaintsList } from "@/Redux/Actions/AuthUser";
+
 type ComplaintStatus = "Open" | "In Review" | "Resolved" | "Closed";
+
+interface ComplaintImage {
+    id: string;
+    imageUrl: string;
+    uploadedAt?: string;
+}
 
 interface Complaint {
     id: string;
@@ -35,9 +45,13 @@ interface Complaint {
     status: ComplaintStatus;
     created_at: string; // ISO
     updated_at: string; // ISO
-    order_id: string;
+    order_id: string; // order.orderCode (ORD-...)
+    order_raw_id?: string; // actual order uuid
+    order_status?: string; // PENDING | COMPLETED etc
     hostel: string;
-    laundry_id: string;
+    laundry_id: string; // studentUserId
+    studentUserId?: string;
+    images?: ComplaintImage[];
 }
 
 const STATUS_STEPS = ["Open", "In Review", "Resolved", "Closed"] as const;
@@ -67,84 +81,105 @@ export default function AdminComplaintsPage() {
         },
     };
 
-    // sample data (replace with API)
-    const [complaints] = useState<Complaint[]>([
-        {
-            id: "c1",
-            ticket_no: "CMP-25001",
-            title: "Damaged button on shirt",
-            description: "One button missing after wash.",
-            category: "Maintenance",
-            status: "Open",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(),
-            order_id: "LDR-2025-0007",
-            hostel: "A-Block",
-            laundry_id: "STU-101",
-        },
-        {
-            id: "c2",
-            ticket_no: "CMP-25002",
-            title: "Late delivery for order",
-            description: "Delivery exceeded expected time by 24 hours.",
-            category: "Other",
-            status: "In Review",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 40).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-            order_id: "LDR-2025-0015",
-            hostel: "A-Block",
-            laundry_id: "STU-098",
-        },
-        {
-            id: "c3",
-            ticket_no: "CMP-25003",
-            title: "Color faded (black jeans)",
-            description: "Significant fading observed.",
-            category: "Maintenance",
-            status: "Resolved",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 60).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-            order_id: "LDR-2025-0018",
-            hostel: "B-Block",
-            laundry_id: "STU-110",
-        },
-        {
-            id: "c4",
-            ticket_no: "CMP-25004",
-            title: "Issue with LDR-2025-0020",
-            description: "Some clothes came back damp.",
-            category: "Maintenance",
-            status: "Closed",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 80).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 10).toISOString(),
-            order_id: "LDR-2025-0020",
-            hostel: "B-Block",
-            laundry_id: "STU-102",
-        },
-        {
-            id: "c5",
-            ticket_no: "CMP-25005",
-            title: "WiFi not working near laundry area",
-            description: "Frequent disconnects affecting QR scan.",
-            category: "Hostel",
-            status: "Open",
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-            order_id: "LDR-2025-0023",
-            hostel: "C-Block",
-            laundry_id: "STU-087",
-        },
-    ]);
+    const dispatch = useDispatch();
+
+    // complaints loaded from API
+    const [complaints, setComplaints] = useState<Complaint[]>([]);
+    const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
 
     // filters
     const [statusFilter, setStatusFilter] = useState<"All" | ComplaintStatus>("All");
     const [hostelFilter, setHostelFilter] = useState<string>("All");
 
-    const hostelOptions = useMemo(() => {
-        const set = new Set<string>();
-        complaints.forEach((c) => set.add(c.hostel));
-        return ["All", ...Array.from(set).sort()];
-    }, [complaints]);
+    // load complaints on mount
+    useEffect(() => {
+        const loadComplaints = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                // dispatch the redux action that calls the API
+                // @ts-ignore
+                const res: any = await dispatch(complaintsList());
+                try {
+                    ErrorHandler(res, () => { });
+                } catch {
+                    // swallow non-fatal errorHandler throws
+                }
+
+                // The API shape you provided: { data: [ ... ], page, pageSize, total }
+                const body = res?.payload ?? res?.data ?? res ?? null;
+                const arr: any[] = Array.isArray(body?.data)
+                    ? body.data
+                    : Array.isArray(body)
+                        ? body
+                        : Array.isArray(body?.complaints)
+                            ? body.complaints
+                            : [];
+
+                const mapped: Complaint[] = arr.map((n: any) => {
+                    // map API complaintStatus -> our ComplaintStatus
+                    const statusMap: Record<string, ComplaintStatus> = {
+                        OPEN: "Open",
+                        IN_REVIEW: "In Review",
+                        INREVIEW: "In Review",
+                        REVIEW: "In Review",
+                        RESOLVED: "Resolved",
+                        CLOSED: "Closed",
+                    };
+                    const apiStatus = String(n.complaintStatus ?? n.status ?? "").toUpperCase();
+                    const status = statusMap[apiStatus] ?? (apiStatus === "PENDING" ? "Open" : "Open");
+
+                    // friendly ticket (API doesn't include ticket_no in your sample)
+                    const ticket_no = String(
+                        n.ticket_no ?? n.ticketNo ?? n.ticket ?? (n.id ? `CMP-${String(n.id).slice(0, 8)}` : `CMP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`)
+                    );
+
+                    // images mapping
+                    const images: ComplaintImage[] = Array.isArray(n.images)
+                        ? n.images.map((img: any) => ({
+                            id: String(img.id ?? Math.random().toString(36).slice(2)),
+                            imageUrl: String(img.imageUrl ?? img.url ?? ""),
+                            uploadedAt: img.uploadedAt ?? img.createdAt ?? img.uploaded_at ?? undefined,
+                        }))
+                        : [];
+
+                    // order code & status
+                    const orderCode = n?.order?.orderCode ?? n.orderCode ?? n.orderId ?? (n.order?.id ?? "");
+                    const orderRawId = n?.order?.id ?? n.orderId ?? undefined;
+                    const orderStatus = n?.order?.orderStatus ?? n.orderStatus ?? undefined;
+
+                    return {
+                        id: String(n.id ?? n._id ?? ticket_no),
+                        ticket_no,
+                        title: String(n.title ?? `Complaint ${ticket_no}`),
+                        description: String(n.description ?? n.detail ?? ""),
+                        category: (n.category ?? "Other") as Complaint["category"],
+                        status,
+                        created_at: n.createdAt ?? n.created_at ?? new Date().toISOString(),
+                        updated_at: n.updatedAt ?? n.updated_at ?? new Date().toISOString(),
+                        order_id: String(orderCode),
+                        order_raw_id: orderRawId,
+                        order_status: orderStatus,
+                        hostel: String(n.hostel ?? "Unknown"),
+                        laundry_id: String(n.studentUserId ?? n.laundry_id ?? n.studentId ?? ""),
+                        studentUserId: String(n.studentUserId ?? ""),
+                        images,
+                    } as Complaint;
+                });
+
+                setComplaints(mapped);
+            } catch (err: any) {
+                console.error("loadComplaints error:", err);
+                setError(err?.message ?? "Failed to load complaints");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadComplaints();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // base filters (hostel + laundry id)
     const baseFiltered = useMemo(() => {
@@ -158,21 +193,17 @@ export default function AdminComplaintsPage() {
         return baseFiltered.reduce(
             (acc, c) => {
                 acc.total++;
+                if (!acc[c.status]) acc[c.status] = 0;
                 acc[c.status]++;
                 return acc;
             },
-            { total: 0, Open: 0, "In Review": 0, Resolved: 0, Closed: 0 } as Record<
-                "total" | ComplaintStatus,
-                number
-            >
+            { total: 0, Open: 0, "In Review": 0, Resolved: 0, Closed: 0 } as Record<"total" | ComplaintStatus, number>
         );
     }, [baseFiltered]);
 
     // final list after clicking a counter (status filter applied over base filters)
     const finalList = useMemo(() => {
-        return statusFilter === "All"
-            ? baseFiltered
-            : baseFiltered.filter((c) => c.status === statusFilter);
+        return statusFilter === "All" ? baseFiltered : baseFiltered.filter((c) => c.status === statusFilter);
     }, [baseFiltered, statusFilter]);
 
     const clearFilters = () => {
@@ -181,11 +212,7 @@ export default function AdminComplaintsPage() {
     };
 
     // ---------- Static info pipeline (top) ----------
-    const InfoPipeline = ({
-        counts,
-    }: {
-        counts: Record<"total" | ComplaintStatus, number>;
-    }) => {
+    const InfoPipeline = ({ counts }: { counts: Record<"total" | ComplaintStatus, number> }) => {
         const ICONS: Record<ComplaintStatus, JSX.Element> = {
             Open: <ReportProblemIcon fontSize="small" />,
             "In Review": <ManageSearchIcon fontSize="small" />,
@@ -210,14 +237,9 @@ export default function AdminComplaintsPage() {
                     <Typography variant="subtitle1" fontWeight={800}>
                         Complaints Progress (Info)
                     </Typography>
-                    <Chip
-                        size="small"
-                        label={`Total: ${counts.total}`}
-                        sx={{ fontWeight: 700, backgroundColor: "#f1f5f9" }}
-                    />
+                    <Chip size="small" label={`Total: ${counts.total}`} sx={{ fontWeight: 700, backgroundColor: "#f1f5f9" }} />
                 </Stack>
 
-                {/* connector line (decorative/static) */}
                 <Box sx={{ position: "relative", height: 8, borderRadius: 999, backgroundColor: baseLine }}>
                     <Box
                         sx={{
@@ -230,13 +252,7 @@ export default function AdminComplaintsPage() {
                     />
                 </Box>
 
-                {/* steps with icons + counts (pure info) */}
-                <Stack
-                    direction="row"
-                    justifyContent="space-between"
-                    alignItems="flex-start"
-                    sx={{ mt: 1.5 }}
-                >
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mt: 1.5 }}>
                     {STATUS_STEPS.map((s) => (
                         <Stack key={s} alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
                             <Box
@@ -254,10 +270,7 @@ export default function AdminComplaintsPage() {
                             >
                                 {ICONS[s]}
                             </Box>
-                            <Typography
-                                variant="caption"
-                                sx={{ fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}
-                            >
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
                                 {s}
                             </Typography>
                             <Chip
@@ -318,42 +331,22 @@ export default function AdminComplaintsPage() {
                                     Complaints
                                 </Typography>
                             </Stack>
-
-                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                                <Select
-                                    size="small"
-                                    value={hostelFilter}
-                                    onChange={(e) => setHostelFilter(e.target.value as string)}
-                                    sx={{ minWidth: 160 }}
-                                >
-                                    {hostelOptions.map((h) => (
-                                        <MenuItem key={h} value={h}>
-                                            {h}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-
-                                {hostelFilter !== "All" && (
-                                    <Button size="small" variant="outlined" color="inherit" onClick={clearFilters}>
-                                        Reset
-                                    </Button>
-                                )}
-                            </Stack>
                         </Box>
 
-                        {/* Status counters (reflect base filters) */}
                         <Grid container spacing={2} mb={2}>
-                            {/* 🔝 Static info progress (top-only) */}
                             <Grid item xs={12}>
                                 <InfoPipeline counts={counts} />
                             </Grid>
-                            {([
-                                { label: "All", value: "All", color: "#64748b", count: counts.total },
-                                { label: "Open", value: "Open", color: BRAND.open, count: counts["Open"] },
-                                { label: "In Review", value: "In Review", color: BRAND.review, count: counts["In Review"] },
-                                { label: "Resolved", value: "Resolved", color: BRAND.resolved, count: counts["Resolved"] },
-                                { label: "Closed", value: "Closed", color: BRAND.closed, count: counts["Closed"] },
-                            ] as const).map((f) => (
+
+                            {(
+                                [
+                                    { label: "All", value: "All", color: "#64748b", count: counts.total },
+                                    { label: "Open", value: "Open", color: BRAND.open, count: counts["Open"] },
+                                    { label: "In Review", value: "In Review", color: BRAND.review, count: counts["In Review"] },
+                                    { label: "Resolved", value: "Resolved", color: BRAND.resolved, count: counts["Resolved"] },
+                                    { label: "Closed", value: "Closed", color: BRAND.closed, count: counts["Closed"] },
+                                ] as const
+                            ).map((f) => (
                                 <Grid item xs={6} sm={12 / 5} key={f.value as string}>
                                     <Card
                                         onClick={() => setStatusFilter(f.value as any)}
@@ -393,7 +386,24 @@ export default function AdminComplaintsPage() {
                             }}
                         >
                             <List sx={{ width: "100%" }}>
-                                {finalList.length === 0 && (
+                                {loading && (
+                                    <Box py={6} textAlign="center">
+                                        <CircularProgress />
+                                        <Typography variant="body1" color="text.secondary" mt={1}>
+                                            Loading complaints...
+                                        </Typography>
+                                    </Box>
+                                )}
+
+                                {error && !loading && (
+                                    <Box py={6} textAlign="center">
+                                        <Typography variant="body1" color="error">
+                                            {error}
+                                        </Typography>
+                                    </Box>
+                                )}
+
+                                {!loading && !error && finalList.length === 0 && (
                                     <Box py={6} textAlign="center">
                                         <Typography variant="body1" color="text.secondary">
                                             No complaints match your filter.
@@ -401,78 +411,98 @@ export default function AdminComplaintsPage() {
                                     </Box>
                                 )}
 
-                                {finalList.map((c) => (
-                                    <ListItem
-                                        key={c.id}
-                                        alignItems="flex-start"
-                                        sx={{
-                                            px: 2,
-                                            py: 1.5,
-                                            borderRadius: 3,
-                                            "&:hover": { backgroundColor: "#f8fafc" },
-                                        }}
-                                        secondaryAction={
-                                            <Stack direction="row" spacing={1} alignItems="center">
-                                                <Chip size="small" variant="outlined" label={c.order_id} sx={{ fontWeight: 600 }} />
-                                                <Chip size="small" variant="outlined" label={c.laundry_id} />
-                                                <Chip size="small" variant="outlined" label={c.hostel} />
-                                                <Chip
-                                                    size="small"
-                                                    label={c.status}
-                                                    sx={{
-                                                        backgroundColor: BRAND.chipBg()[c.status],
-                                                        color: BRAND.color()[c.status],
-                                                        fontWeight: 700,
-                                                    }}
-                                                />
-                                                {/* Order status is ALWAYS Pending (read-only) */}
-                                                <Chip size="small" color="warning" label="Order: Pending" />
-                                            </Stack>
-                                        }
-                                    >
-                                        <ListItemAvatar>
-                                            <Avatar sx={{ bgcolor: BRAND.color()[c.status] }}>
-                                                <ReportProblemIcon />
-                                            </Avatar>
-                                        </ListItemAvatar>
-                                        <ListItemText
-                                            primary={
+                                {!loading &&
+                                    !error &&
+                                    finalList.map((c) => (
+                                        <ListItem
+                                            key={c.id}
+                                            alignItems="flex-start"
+                                            sx={{
+                                                px: 2,
+                                                py: 1.5,
+                                                borderRadius: 3,
+                                                "&:hover": { backgroundColor: "#f8fafc" },
+                                            }}
+                                            secondaryAction={
                                                 <Stack direction="row" spacing={1} alignItems="center">
-                                                    <Typography variant="subtitle1" fontWeight={700}>
-                                                        {c.title}
-                                                    </Typography>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        • {c.ticket_no}
-                                                    </Typography>
+                                                    <Chip size="small" variant="outlined" label={c.order_id} sx={{ fontWeight: 600 }} />
+                                                    <Chip size="small" variant="outlined" label={c.laundry_id} />
+                                                    <Chip size="small" variant="outlined" label={c.hostel} />
+                                                    <Chip
+                                                        size="small"
+                                                        label={c.status}
+                                                        sx={{
+                                                            backgroundColor: BRAND.chipBg()[c.status],
+                                                            color: BRAND.color()[c.status],
+                                                            fontWeight: 700,
+                                                        }}
+                                                    />
+                                                    {/* Order status badge */}
+                                                    {c.order_status && (
+                                                        <Chip
+                                                            size="small"
+                                                            label={c.order_status}
+                                                            sx={{
+                                                                fontWeight: 700,
+                                                                bgcolor: c.order_status === "PENDING" ? "#f59e0b22" : "#10b98122",
+                                                                color: c.order_status === "PENDING" ? "#b45309" : "#065f46",
+                                                            }}
+                                                        />
+                                                    )}
                                                 </Stack>
                                             }
-                                            secondary={
-                                                <Stack spacing={0.5}>
-                                                    <Typography
-                                                        variant="body2"
-                                                        color="text.secondary"
-                                                        sx={{
-                                                            display: "-webkit-box",
-                                                            WebkitLineClamp: 2,
-                                                            WebkitBoxOrient: "vertical",
-                                                            overflow: "hidden",
-                                                        }}
-                                                    >
-                                                        {c.description}
-                                                    </Typography>
+                                        >
+                                            <ListItemAvatar>
+                                                {c.images && c.images.length > 0 ? (
+                                                    <Avatar
+                                                        variant="rounded"
+                                                        sx={{ width: 48, height: 48 }}
+                                                        src={c.images[0].imageUrl}
+                                                        alt={c.title}
+                                                    />
+                                                ) : (
+                                                    <Avatar sx={{ bgcolor: BRAND.color()[c.status] }}>
+                                                        <ReportProblemIcon />
+                                                    </Avatar>
+                                                )}
+                                            </ListItemAvatar>
+
+                                            <ListItemText
+                                                primary={
                                                     <Stack direction="row" spacing={1} alignItems="center">
-                                                        <Chip size="small" variant="outlined" label={c.category} />
+                                                        <Typography variant="subtitle1" fontWeight={700}>
+                                                            {c.title}
+                                                        </Typography>
                                                         <Typography variant="caption" color="text.secondary">
-                                                            Created: {new Date(c.created_at).toLocaleString()}
-                                                            {" • "}
-                                                            Updated: {new Date(c.updated_at).toLocaleString()}
+                                                            • {c.ticket_no}
                                                         </Typography>
                                                     </Stack>
-                                                </Stack>
-                                            }
-                                        />
-                                    </ListItem>
-                                ))}
+                                                }
+                                                secondary={
+                                                    <Stack spacing={0.5}>
+                                                        <Typography
+                                                            variant="body2"
+                                                            color="text.secondary"
+                                                            sx={{
+                                                                display: "-webkit-box",
+                                                                WebkitLineClamp: 2,
+                                                                WebkitBoxOrient: "vertical",
+                                                                overflow: "hidden",
+                                                            }}
+                                                        >
+                                                            {c.description}
+                                                        </Typography>
+                                                        <Stack direction="row" spacing={1} alignItems="center">
+                                                            <Chip size="small" variant="outlined" label={c.category} />
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                Created: {new Date(c.created_at).toLocaleString()} {" • "} Updated: {new Date(c.updated_at).toLocaleString()}
+                                                            </Typography>
+                                                        </Stack>
+                                                    </Stack>
+                                                }
+                                            />
+                                        </ListItem>
+                                    ))}
                             </List>
                         </Card>
                     </Card>

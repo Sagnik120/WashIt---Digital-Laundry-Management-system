@@ -20,6 +20,7 @@ const Layout = ({ children }) => {
     "/staff/staffScanEntry",
     "/staff/staffOrder",
     "/staff/staffComplaint",
+    "/admin/dashboard",
     "/admin/configuration",
     "/admin/allOrdersEntry",
     "/admin/allComplaint",
@@ -36,10 +37,9 @@ const Layout = ({ children }) => {
 
   if (privateRoutes.includes(pathname)) {
     return (
-      <PrivateLayout>{children}</PrivateLayout>
-      // <ProtectedRoute>
-      //   <PrivateLayout>{children}</PrivateLayout>
-      // </ProtectedRoute>
+      <ProtectedRoute>
+        <PrivateLayout>{children}</PrivateLayout>
+      </ProtectedRoute>
     );
   } else if (publicRoutes.includes(pathname)) {
     return children;

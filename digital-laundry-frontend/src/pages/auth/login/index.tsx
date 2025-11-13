@@ -15,8 +15,9 @@ import usePageLoader from "@/Redux/hooks/usePageLoader";
 import useSnackBar from "@/Redux/hooks/useSnackBar";
 import LocalLaundryServiceIcon from "@mui/icons-material/LocalLaundryService";
 import AuthWrapper from "../../../Components/AuthLayout/AuthLayout";
-import { loginFunction, studentLoginAction } from "../../../Redux/Actions/AuthUser";
 import ErrorHandler from "../../../lib/errorHandler";
+import { LoginFunction, ProfileDetails } from "@/Redux/Actions/AuthUser";
+import cookieUtils from "@/ApiSetUp/CookieUtils";
 
 
 const Login = () => {
@@ -40,8 +41,6 @@ const Login = () => {
   const handleChangeInput = (e: any) => {
     const { name, value } = e.target;
     setData({ ...data, [name]: value });
-
-    // Real-time validation
     let tempErrors: any = { ...errors };
 
     if (name === "email") {
@@ -63,7 +62,6 @@ const Login = () => {
         tempErrors.password = "";
       }
     }
-
     setErrors(tempErrors);
   };
 
@@ -91,81 +89,69 @@ const Login = () => {
     return isValid;
   };
 
-  // const handleSubmit = () => {
-  //   if (validate()) {
-  //     // Proceed with login
-  //     setSnackBar("success", "Login successful!");
-  //     console.log("Login data:", data);
-  //     // Add your login API call here
-  //   } else {
-  //     setSnackBar("error", "Please fix the errors before submitting");
-  //   }
-  // };
-
   const handleSubmit = async () => {
+    try {
+      const isFormValid = await validate();
+      if (!isFormValid) return;
 
-    const isFormValid = await validate();
-    if (!isFormValid) return;
+      setFullPageLoader(true);
 
-    setFullPageLoader(true);
-    const body = {
-      email: data?.email,
-      password: data?.password,
-    };
+      const body = {
+        email: data?.email,
+        password: data?.password,
+      };
 
-    dispatch(loginFunction(body))
-      .then((res: any) => {
-        const error = ErrorHandler(res, setSnackBar);
-        if (error) {
-          const userData = res.payload.user;
-          const safeUserData: any = {
-            _id: userData?._id,
-            userName: userData?.userName,
-            fullName: userData?.fullName,
-            email: userData?.email,
-            role: userData?.role,
-            profileImage: userData?.profileImage,
-            password: data?.password
-          };
-          // cookieUtils.setCookie('userData', safeUserData, 1);
-          localStorage.setItem('token', res?.payload?.accessToken);
-          localStorage.setItem("role", res.payload.user.role)
-          localStorage.setItem("userData", JSON.stringify(safeUserData))
-          setSnackBar('success', res.payload.message);
-          router.push('/user/userProfile');
-        }
-      })
-      .catch((err: any) => {
-        setSnackBar('error', 'Please provide correct details.');
-      })
-      .finally(() => {
+      const loginRes: any = await dispatch(LoginFunction(body));
+      const loginError = ErrorHandler(loginRes, setSnackBar);
+
+      if (!loginError) {
+        setSnackBar('error', loginRes?.payload?.data?.message || 'Login failed');
         setFullPageLoader(false);
-      });
+        return;
+      }
+
+      const { token, role } = loginRes?.payload || {};
+      localStorage.setItem('token', token);
+      localStorage.setItem('role', role);
+      cookieUtils.setCookie('token', token, 1);
+
+      const profileRes: any = await dispatch(ProfileDetails());
+      const profileError = ErrorHandler(profileRes, setSnackBar);
+
+      if (!profileError) {
+        setSnackBar('error', profileRes?.payload?.data?.message || 'Failed to load profile');
+        setFullPageLoader(false);
+        return;
+      }
+
+      console.log(profileRes?.payload, 'Profile response');
+      localStorage.setItem('userData', JSON.stringify({email : profileRes?.payload?.email}));
+      cookieUtils.setCookie('userData', JSON.stringify(profileRes?.payload), 1);
+
+      setSnackBar('success', 'Login successful');
+
+      const routeForRole = (() => {
+        switch (role) {
+          case 'ADMIN':
+            return '/admin/dashboard';
+          case 'STUDENT':
+            return '/user/userProfile';
+          case 'STAFF':
+            return '/staff/staffScanEntry';
+          default:
+            return '/';
+        }
+      })();
+
+      await router.push(routeForRole);
+      setFullPageLoader(false);
+
+    } catch (error: any) {
+      console.error('Login error:', error);
+      setSnackBar('error', error?.message || 'Something went wrong during login');
+      setFullPageLoader(false);
+    }
   };
-
-  function handleStaffLogin() {
-    const payload = {
-      email: data?.email,
-      password: data?.password,
-    };
-
-    dispatch(studentLoginAction(payload))
-      .then((res: any) => {
-        const ok = ErrorHandler(res, setSnackBar);
-        if (ok) {
-          setSnackBar("success", "Login successfully");
-          localStorage.setItem("role", res.payload.user.role)
-          router.push("/staff/staffScanEntry")
-        }
-      })
-      .catch((err: any) => {
-        setSnackBar("error", err.message);
-      })
-      .finally(() => {
-        setFullPageLoader(false);
-      });
-  }
-
 
   return (
     <AuthWrapper>
@@ -393,7 +379,7 @@ const Login = () => {
                     : "linear-gradient(135deg, #dc2626, #f97316)", // admin theme
               "&:hover": { opacity: 0.9 },
             }}
-            onClick={role === 'student' ? () => handleSubmit() : role === 'staff' ? () => handleStaffLogin() : () => handleSubmit()}
+            onClick={() => handleSubmit()}
           >
             {role === "student"
               ? "Login as Student"
