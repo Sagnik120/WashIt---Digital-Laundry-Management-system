@@ -126,6 +126,8 @@ npm install
 # Start development server
 npm run dev
 
+
+
 ## 👥 Team
 WashIt Development Team
 Computer Science Department
