@@ -11,8 +11,6 @@
 
 WashIt is a comprehensive digital solution designed to replace IIT Jodhpur's traditional paper-based laundry management system. This web-based platform streamlines the entire laundry workflow, providing a seamless experience for students, laundry staff, and administrators through modern technology and intuitive design.
 
-![System Overview](https://via.placeholder.com/800x400/2D3748/FFFFFF?text=WashIt+-+Digital+Laundry+Management)
-
 ## ✨ Key Features
 
 ### 👨‍🎓 For Students
@@ -34,40 +32,6 @@ WashIt is a comprehensive digital solution designed to replace IIT Jodhpur's tra
 - **System Oversight** - Monitor overall system performance
 - **User Management** - Administrative control over user accounts
 - **Reporting** - Comprehensive laundry activity reports
-
-## 🏗️ System Architecture
-
-### 📐 Layered Architecture Pattern
-
-┌─────────────────────────────────────────────────┐
-│ [1] PRESENTATION LAYER │
-│ (API Endpoints - Routes) │
-└─────────────────────────────────────────────────┘
-                        │  
-                      ↗ │ ↖
-      REQUEST [1]→[2] │ [2]←[1] RESPONSE
-                      ↓ ▼ ↑
-┌─────────────────────────────────────────────────┐
-│ [2] BUSINESS LOGIC LAYER │
-│ (Application Logic - Controllers) │
-└─────────────────────────────────────────────────┘
-                        │
-                      ↗ │ ↖
-            REQUEST [2]→[3] │ [3]←[2] RESPONSE
-                      ↓ ▼ ↑
-┌─────────────────────────────────────────────────┐
-│ [3] DATA ACCESS LAYER │
-│ (Data Models - Models) │
-└─────────────────────────────────────────────────┘
-                        │
-                      ↗ │ ↖
-        REQUEST [3]→[4] │ [4]←[3] RESPONSE
-                      ↓ ▼ ↑
-┌─────────────────────────────────────────────────┐
-│ [4] DATABASE LAYER │
-│ PostgreSQL Database │
-└─────────────────────────────────────────────────┘
-
 
 ## 🛠️ Technology Stack
 
